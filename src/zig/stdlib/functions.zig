@@ -8,6 +8,15 @@ const Expression = expression.Expression;
 
 pub const Error = @import("type.zig").Error;
 
+fn exec_runtime_function(func: expression.Function, call_args: []Expression, scope: *Scope) Error!void {
+    var local_scope = try Scope.init(scope.allocator, scope.out, scope, func.args, call_args);
+    for (func.body) |st| {
+        try interpreter.evalStatement(st, &local_scope);
+    }
+    const out = local_scope.result() orelse unreachable;
+    scope.return_result = try out.clone(scope.allocator);
+}
+
 pub fn length(args: []const Expression, scope: *Scope) Error!void {
     switch (args[0]) {
         .array => |a| {
