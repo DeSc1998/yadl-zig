@@ -114,20 +114,20 @@ pub fn map(args: []const Expression, scope: *Scope) Error!void {
 
     switch (elements) {
         .array => |a| {
-            const tmp = try scope.allocator.alloc(Expression, a.elements.len);
+            const out = try scope.allocator.alloc(Expression, a.elements.len);
             const func = callable.function;
-            for (a.elements, tmp) |e, *t| {
-                var tmp2 = try scope.allocator.alloc(Expression, 1);
-                defer scope.allocator.free(tmp2);
-                tmp2[0] = e;
-                try exec_runtime_function(func, tmp2, scope);
+            for (a.elements, out) |e, *t| {
+                var call_args = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = e;
+                try exec_runtime_function(func, call_args, scope);
                 if (scope.result()) |r| {
                     t.* = r;
                 } else {
                     return Error.ValueNotFound;
                 }
             }
-            scope.return_result = try expression.Array.init(scope.allocator, tmp);
+            scope.return_result = try expression.Array.init(scope.allocator, out);
         },
         .iterator => {
             const tmp = try scope.allocator.alloc(Expression, 2);
@@ -182,6 +182,10 @@ pub fn flatten(args: []const Expression, scope: *Scope) Error!void {
             } };
             scope.return_result = out;
         },
+        .iterator => {
+            std.debug.print("TODO: flatten iterator\n", .{});
+            return Error.NotImplemented;
+        },
         else => scope.return_result = try lists.clone(scope.allocator),
     }
 }
@@ -215,16 +219,16 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
         .array => |a| {
             var acc = a.elements[0];
             for (a.elements[1..]) |e| {
-                var tmp = try scope.allocator.alloc(Expression, 2);
-                tmp[0] = acc;
-                tmp[1] = e;
-                try exec_runtime_function(func, tmp, scope);
+                var call_args = try scope.allocator.alloc(Expression, 2);
+                call_args[0] = acc;
+                call_args[1] = e;
+                try exec_runtime_function(func, call_args, scope);
                 if (scope.result()) |r| {
                     acc = r;
                 } else {
                     return Error.ValueNotFound;
                 }
-                scope.allocator.free(tmp);
+                scope.allocator.free(call_args);
             }
             const out = try scope.allocator.create(Expression);
             out.* = acc;
@@ -248,11 +252,11 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
             while (result.boolean.value) {
                 try iter_next(args[0..1], scope);
                 const e = scope.result() orelse unreachable;
-                var tmp = try scope.allocator.alloc(Expression, 2);
-                defer scope.allocator.free(tmp);
-                tmp[0] = acc;
-                tmp[1] = e;
-                try exec_runtime_function(func, tmp, scope);
+                var call_args = try scope.allocator.alloc(Expression, 2);
+                defer scope.allocator.free(call_args);
+                call_args[0] = acc;
+                call_args[1] = e;
+                try exec_runtime_function(func, call_args, scope);
                 if (scope.result()) |r| {
                     std.debug.print("INFO: reduce result type: {s}\n", .{@tagName(r)});
                     acc = r;
@@ -301,9 +305,10 @@ pub fn group_by(args: []const Expression, scope: *Scope) Error!void {
             const writer = fixedStream.writer().any();
             for (a.elements) |elem| {
                 fixedStream.reset();
-                const tmp: []Expression = try scope.allocator.alloc(Expression, 1);
-                tmp[0] = elem;
-                try exec_runtime_function(callable.function, tmp, scope);
+                const call_args: []Expression = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = elem;
+                try exec_runtime_function(callable.function, call_args, scope);
                 const result = scope.result() orelse return Error.ValueNotFound;
                 var out_scope = Scope.empty(scope.allocator, writer);
                 // NOTE: praying that only simple values are printed
@@ -408,9 +413,10 @@ fn check(context: Context, args: []const Expression, scope: *Scope) Error!void {
         .array => |a| {
             var acc: Context.OutType = context.initial;
             for (a.elements) |e| {
-                var tmp = try scope.allocator.alloc(Expression, 1);
-                tmp[0] = e;
-                try exec_runtime_function(func, tmp, scope);
+                var call_args = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = e;
+                try exec_runtime_function(func, call_args, scope);
                 if (scope.result()) |r| {
                     if (r == .boolean) {
                         acc = context.operation(acc, r.boolean.value);
@@ -421,7 +427,6 @@ fn check(context: Context, args: []const Expression, scope: *Scope) Error!void {
                 } else {
                     return Error.ValueNotFound;
                 }
-                scope.allocator.free(tmp);
             }
             scope.return_result = switch (acc) {
                 .boolean => |v| try expression.Boolean.init(scope.allocator, v),
@@ -532,14 +537,11 @@ pub fn filter(args: []const Expression, scope: *Scope) Error!void {
             var current_index: usize = 0;
             const func = callable.function;
             for (a.elements) |e| {
-                var tmp2 = try scope.allocator.alloc(Expression, 1);
-                defer scope.allocator.free(tmp2);
-                tmp2[0] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp2);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                var call_args = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = e;
+                try exec_runtime_function(func, call_args, scope);
+                if (scope.result()) |r| {
                     if (r == .boolean and r.boolean.value) {
                         tmp[current_index] = e;
                         current_index += 1;
@@ -593,16 +595,12 @@ fn partition(elements: []Expression, binary_op: expression.Function, scope: *Sco
     var pivot = elements.len - 1;
     var left: usize = 0;
     while (left < pivot) {
-        var tmp = try scope.allocator.alloc(Expression, 2);
-        defer scope.allocator.free(tmp);
-        tmp[0] = elements[left];
-        tmp[1] = elements[pivot];
-        var local = try Scope.init(scope.allocator, scope.out, scope, binary_op.args, tmp);
-        for (binary_op.body) |st| {
-            // std.debug.print("INFO: in partition current statement type: {s}\n", .{@tagName(st)});
-            try interpreter.evalStatement(st, &local);
-        }
-        const result = local.result() orelse return Error.ValueNotFound;
+        var call_args = try scope.allocator.alloc(Expression, 2);
+        defer scope.allocator.free(call_args);
+        call_args[0] = elements[left];
+        call_args[1] = elements[pivot];
+        try exec_runtime_function(binary_op, call_args, scope);
+        const result = scope.result() orelse return Error.ValueNotFound;
         if (result == .number and result.number.asFloat() == -1) {
             left += 1;
         } else if (result == .boolean and result.boolean.value) {
@@ -657,14 +655,11 @@ pub fn last(args: []const Expression, scope: *Scope) Error!void {
         .array => |a| {
             var iter = std.mem.reverseIterator(a.elements);
             while (iter.next()) |e| {
-                var tmp2 = try scope.allocator.alloc(Expression, 1);
-                defer scope.allocator.free(tmp2);
-                tmp2[0] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp2);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                var call_args = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = e;
+                try exec_runtime_function(func, call_args, scope);
+                if (scope.result()) |r| {
                     if (r == .boolean and r.boolean.value) {
                         scope.return_result = try e.clone(scope.allocator);
                         return;
@@ -689,14 +684,11 @@ pub fn first(args: []const Expression, scope: *Scope) Error!void {
     switch (elements) {
         .array => |a| {
             for (a.elements) |e| {
-                var tmp2 = try scope.allocator.alloc(Expression, 1);
-                defer scope.allocator.free(tmp2);
-                tmp2[0] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp2);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                var call_args = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(call_args);
+                call_args[0] = e;
+                try exec_runtime_function(func, call_args, scope);
+                if (scope.result()) |r| {
                     if (r == .boolean and r.boolean.value) {
                         scope.return_result = try e.clone(scope.allocator);
                         return;
