@@ -93,12 +93,7 @@ fn map_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
     try iter_next(tmp, scope);
     args[0] = scope.result() orelse unreachable;
     const func = local_data[MAP_FN_INDEX].function;
-    var local_scope = try Scope.init(scope.allocator, scope.out, scope, func.args, args);
-    for (func.body) |st| {
-        try interpreter.evalStatement(st, &local_scope);
-    }
-    const out = local_scope.result() orelse unreachable;
-    scope.return_result = try out.clone(scope.allocator);
+    try exec_runtime_function(func, args, scope);
 }
 
 fn map_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
@@ -125,11 +120,8 @@ pub fn map(args: []const Expression, scope: *Scope) Error!void {
                 var tmp2 = try scope.allocator.alloc(Expression, 1);
                 defer scope.allocator.free(tmp2);
                 tmp2[0] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp2);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                try exec_runtime_function(func, tmp, scope);
+                if (scope.result()) |r| {
                     t.* = r;
                 } else {
                     return Error.ValueNotFound;
@@ -226,11 +218,8 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
                 var tmp = try scope.allocator.alloc(Expression, 2);
                 tmp[0] = acc;
                 tmp[1] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                try exec_runtime_function(func, tmp, scope);
+                if (scope.result()) |r| {
                     acc = r;
                 } else {
                     return Error.ValueNotFound;
@@ -263,11 +252,8 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
                 defer scope.allocator.free(tmp);
                 tmp[0] = acc;
                 tmp[1] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                try exec_runtime_function(func, tmp, scope);
+                if (scope.result()) |r| {
                     std.debug.print("INFO: reduce result type: {s}\n", .{@tagName(r)});
                     acc = r;
                 } else {
@@ -317,11 +303,8 @@ pub fn group_by(args: []const Expression, scope: *Scope) Error!void {
                 fixedStream.reset();
                 const tmp: []Expression = try scope.allocator.alloc(Expression, 1);
                 tmp[0] = elem;
-                var local = try Scope.init(scope.allocator, scope.out, scope, callable.function.args, tmp);
-                for (callable.function.body) |st| {
-                    try interpreter.evalStatement(st, &local);
-                }
-                const result = local.result() orelse return Error.ValueNotFound;
+                try exec_runtime_function(callable.function, tmp, scope);
+                const result = scope.result() orelse return Error.ValueNotFound;
                 var out_scope = Scope.empty(scope.allocator, writer);
                 // NOTE: praying that only simple values are printed
                 try interpreter.printValue(result, &out_scope);
@@ -427,11 +410,8 @@ fn check(context: Context, args: []const Expression, scope: *Scope) Error!void {
             for (a.elements) |e| {
                 var tmp = try scope.allocator.alloc(Expression, 1);
                 tmp[0] = e;
-                var tmpScope = try Scope.init(scope.allocator, scope.out, scope, func.args, tmp);
-                for (func.body) |st| {
-                    try interpreter.evalStatement(st, &tmpScope);
-                }
-                if (tmpScope.result()) |r| {
+                try exec_runtime_function(func, tmp, scope);
+                if (scope.result()) |r| {
                     if (r == .boolean) {
                         acc = context.operation(acc, r.boolean.value);
                     } else if (r != .boolean) {
