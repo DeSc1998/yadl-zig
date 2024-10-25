@@ -120,7 +120,7 @@ pub fn map(args: []const Expression, scope: *Scope) Error!void {
                 var tmp2 = try scope.allocator.alloc(Expression, 1);
                 defer scope.allocator.free(tmp2);
                 tmp2[0] = e;
-                try exec_runtime_function(func, tmp, scope);
+                try exec_runtime_function(func, tmp2, scope);
                 if (scope.result()) |r| {
                     t.* = r;
                 } else {
