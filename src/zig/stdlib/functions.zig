@@ -448,6 +448,77 @@ pub fn check_none(args: []const Expression, scope: *Scope) Error!void {
     try check(None_context, args, scope);
 }
 
+const FILTER_FN_INDEX = 1;
+const FILTER_DATA_INDEX = 0;
+fn filter_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const elements = data_expr.array.elements;
+    std.debug.assert(elements[FILTER_FN_INDEX] == .function);
+    std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
+    const iter = &elements[FILTER_DATA_INDEX];
+    const func = elements[FILTER_FN_INDEX].function;
+    try iter_has_next(iter[0..1], scope);
+    var result = scope.result_ref() orelse unreachable;
+    if (!result.boolean.value) {
+        scope.return_result = result;
+        return;
+    }
+
+    try iter_next(iter[0..1], scope);
+    var out = scope.result_ref() orelse unreachable;
+    try exec_runtime_function(func, out[0..1], scope);
+    result = scope.result_ref() orelse unreachable;
+    while (result.* == .boolean and !result.boolean.value) {
+        try iter_has_next(iter[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+        if (!result.boolean.value) {
+            scope.return_result = result;
+            return;
+        }
+
+        try iter_next(iter[0..1], scope);
+        out = scope.result_ref() orelse unreachable;
+        try exec_runtime_function(func, out[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+    }
+    scope.return_result = out;
+}
+
+fn filter_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const elements = data_expr.array.elements;
+    std.debug.assert(elements[FILTER_FN_INDEX] == .function);
+    std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
+    const tmp_iter = try elements[FILTER_DATA_INDEX].clone(scope.allocator);
+    const func = elements[FILTER_FN_INDEX].function;
+    defer expression.free(scope.allocator, tmp_iter);
+    try iter_has_next(tmp_iter[0..1], scope);
+    var result = scope.result_ref() orelse unreachable;
+    if (!result.boolean.value) {
+        scope.return_result = result;
+        return;
+    }
+
+    try iter_next(tmp_iter[0..1], scope);
+    result = scope.result_ref() orelse unreachable;
+    try exec_runtime_function(func, result[0..1], scope);
+    result = scope.result_ref() orelse unreachable;
+    while (result.* == .boolean and !result.boolean.value) {
+        try iter_has_next(tmp_iter[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+        if (!result.boolean.value) {
+            scope.return_result = result;
+            return;
+        }
+
+        try iter_next(tmp_iter[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+        try exec_runtime_function(func, result[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+    }
+    scope.return_result = result;
+}
+
 pub fn filter(args: []const Expression, scope: *Scope) Error!void {
     const elements = args[0];
     const callable = args[1];
@@ -478,6 +549,13 @@ pub fn filter(args: []const Expression, scope: *Scope) Error!void {
                 }
             }
             scope.return_result = try expression.Array.init(scope.allocator, tmp);
+        },
+        .iterator => {
+            const tmp = try scope.allocator.alloc(Expression, 2);
+            tmp[FILTER_DATA_INDEX] = elements;
+            tmp[FILTER_FN_INDEX] = callable;
+            const data_expr = try expression.Array.init(scope.allocator, tmp);
+            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &filter_next, &filter_has_next, data_expr);
         },
         else => return Error.NotImplemented,
     }
