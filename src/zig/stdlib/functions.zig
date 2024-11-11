@@ -760,6 +760,21 @@ pub fn default_iterator(args: []const Expression, scope: *Scope) Error!void {
         else => return Error.InvalidExpressoinType,
     }
 }
+
+fn custom_iterator(args: []const Expression, scope: *Scope) Error!void {
+    std.debug.assert(args.len == 3);
+    if (args[0] != .function and args[1] != .function) {
+        return Error.InvalidExpressoinType;
+    }
+
+    scope.return_result = try expression.Iterator.init(
+        scope.allocator,
+        args[0].function, // next function
+        args[1].function, // has_next function
+        try args[2].clone(scope.allocator), // data
+    );
+}
+
 pub fn iterator(args: []const Expression, scope: *Scope) Error!void {
     const next_fn = args[0];
     const has_next_fn = args[1];
