@@ -1,0 +1,13 @@
+// RUN: DEFAULT
+
+list = [ 1, 2, 3, 4 ]
+iter = default_iterator(list)
+
+while (has_next(iter)) {
+    print(next(iter))
+}
+
+// CHECK-OUT: 1
+// CHECK-OUT: 2
+// CHECK-OUT: 3
+// CHECK-OUT: 4

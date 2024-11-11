@@ -708,6 +708,58 @@ pub fn print3(args: []const Expression, scope: *Scope) Error!void {
     _ = scope.out.write("\n") catch return Error.IOWrite;
 }
 
+const DEFAULT_INDEX = 1;
+const DEFAULT_DATA_INDEX = 0;
+fn default_next(data_expr: *Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    switch (local_data[DEFAULT_DATA_INDEX]) {
+        .array => |a| {
+            std.debug.assert(local_data[DEFAULT_INDEX] == .number);
+            std.debug.assert(local_data[DEFAULT_INDEX].number == .integer);
+            const index = local_data[DEFAULT_INDEX];
+            const i: usize = @intCast(index.number.integer);
+            scope.return_result = try a.elements[i].clone(scope.allocator);
+            local_data[DEFAULT_INDEX] = .{ .number = .{ .integer = @as(i64, @intCast(i)) + 1 } };
+            expression.free_local(scope.allocator, index);
+        },
+        .dictionary => return Error.NotImplemented,
+        else => return Error.InvalidExpressoinType,
+    }
+}
+
+fn default_has_next(data_expr: *Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    switch (local_data[DEFAULT_DATA_INDEX]) {
+        .array => |a| {
+            std.debug.assert(local_data[DEFAULT_INDEX] == .number);
+            std.debug.assert(local_data[DEFAULT_INDEX].number == .integer);
+            const n = local_data[DEFAULT_INDEX].number.integer;
+            scope.return_result = try expression.Boolean.init(scope.allocator, a.elements.len > @as(usize, @intCast(n)));
+        },
+        .dictionary => return Error.NotImplemented,
+        else => return Error.InvalidExpressoinType,
+    }
+}
+
+pub fn default_iterator(args: []const Expression, scope: *Scope) Error!void {
+    std.debug.assert(args.len == 1);
+    switch (args[0]) {
+        .iterator => {
+            scope.return_result = try args[0].clone(scope.allocator);
+        },
+        .array => {
+            const tmp = try scope.allocator.alloc(Expression, 2);
+            tmp[DEFAULT_DATA_INDEX] = args[0];
+            tmp[DEFAULT_INDEX] = .{ .number = .{ .integer = 0 } };
+            const data_expr = try expression.Array.init(scope.allocator, tmp);
+            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &default_next, &default_has_next, data_expr);
+        },
+        .dictionary => return Error.NotImplemented,
+        else => return Error.InvalidExpressoinType,
+    }
+}
 pub fn iterator(args: []const Expression, scope: *Scope) Error!void {
     const next_fn = args[0];
     const has_next_fn = args[1];
