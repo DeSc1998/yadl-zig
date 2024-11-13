@@ -479,6 +479,35 @@ fn check(context: Context, args: []const Expression, scope: *Scope) Error!void {
                 .number => |v| try expression.Number.init(scope.allocator, i64, v),
             };
         },
+        .iterator => {
+            var acc: Context.OutType = context.initial;
+            const elems = &elements;
+            try iter_has_next(elems[0..1], scope);
+            var condition = scope.result() orelse unreachable;
+            var call_args = try scope.allocator.alloc(Expression, 1);
+            defer scope.allocator.free(call_args);
+            while (condition == .boolean and condition.boolean.value) {
+                try iter_next(elems[0..1], scope);
+                call_args[0] = scope.result() orelse unreachable;
+                try exec_runtime_function(func, call_args, scope);
+                if (scope.result()) |r| {
+                    if (r == .boolean) {
+                        acc = context.operation(acc, r.boolean.value);
+                    } else if (r != .boolean) {
+                        std.debug.print("ERROR: returned value of function is not a boolean\n", .{});
+                        return Error.InvalidExpressoinType;
+                    }
+                } else {
+                    return Error.ValueNotFound;
+                }
+                try iter_has_next(elems[0..1], scope);
+                condition = scope.result() orelse unreachable;
+            }
+            scope.return_result = switch (acc) {
+                .boolean => |v| try expression.Boolean.init(scope.allocator, v),
+                .number => |v| try expression.Number.init(scope.allocator, i64, v),
+            };
+        },
         else => return Error.NotImplemented,
     }
 }
