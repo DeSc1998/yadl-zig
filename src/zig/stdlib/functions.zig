@@ -140,6 +140,49 @@ pub fn map(args: []const Expression, scope: *Scope) Error!void {
     }
 }
 
+const FLATTEN_DATA_INDEX = 0;
+const FLATTEN_INTERMEDIATE_INDEX = 1;
+fn flatten_iter_has_elements(iter: Expression, scope: *Scope) bool {
+    if (iter == .iterator) {
+        const ptr = &iter;
+        iter_has_next(ptr[0..1], scope) catch return false;
+        const tmp = scope.result() orelse unreachable;
+        return tmp == .boolean and tmp.boolean.value;
+    }
+
+    return false;
+}
+
+fn flatten_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    std.debug.assert(local_data[FLATTEN_DATA_INDEX] == .iterator);
+    if (!flatten_iter_has_elements(local_data[FLATTEN_INTERMEDIATE_INDEX], scope)) {
+        try iter_next(local_data[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], scope);
+        const tmp = scope.result_ref() orelse unreachable;
+        try default_iterator(tmp[0..1], scope);
+        local_data[FLATTEN_INTERMEDIATE_INDEX] = scope.result() orelse unreachable;
+    }
+    try iter_next(local_data[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1], scope);
+}
+
+fn flatten_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    std.debug.assert(local_data[FLATTEN_DATA_INDEX] == .iterator);
+    if (local_data[FLATTEN_INTERMEDIATE_INDEX] == .none) {
+        try iter_has_next(local_data[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], scope);
+    } else if (local_data[FLATTEN_INTERMEDIATE_INDEX] == .iterator) {
+        try iter_has_next(local_data[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1], scope);
+        const tmp = scope.result() orelse unreachable;
+        if (tmp == .boolean and !tmp.boolean.value) {
+            try iter_has_next(local_data[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], scope);
+        } else {
+            scope.return_result = try tmp.clone(scope.allocator);
+        }
+    }
+}
+
 pub fn flatten(args: []const Expression, scope: *Scope) Error!void {
     const lists = args[0];
     switch (lists) {
@@ -183,8 +226,11 @@ pub fn flatten(args: []const Expression, scope: *Scope) Error!void {
             scope.return_result = out;
         },
         .iterator => {
-            std.debug.print("TODO: flatten iterator\n", .{});
-            return Error.NotImplemented;
+            const tmp = try scope.allocator.alloc(Expression, 2);
+            tmp[FLATTEN_DATA_INDEX] = lists;
+            tmp[FLATTEN_INTERMEDIATE_INDEX] = .{ .none = null };
+            const data_expr = try expression.Array.init(scope.allocator, tmp);
+            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &flatten_next, &flatten_has_next, data_expr);
         },
         else => scope.return_result = try lists.clone(scope.allocator),
     }
@@ -195,7 +241,7 @@ pub fn flatmap(args: []const Expression, scope: *Scope) Error!void {
     const callable = args[1];
     std.debug.assert(callable == .function);
     switch (elements) {
-        .array => {
+        .array, .iterator => {
             try map(args, scope);
             const map_result = scope.result() orelse unreachable;
             try flatten(&[_]Expression{map_result}, scope);
