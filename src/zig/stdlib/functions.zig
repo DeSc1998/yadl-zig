@@ -774,6 +774,30 @@ pub fn first(args: []const Expression, scope: *Scope) Error!void {
             }
             scope.return_result = try default_value.clone(scope.allocator);
         },
+        .iterator => {
+            const elems = &elements;
+            try iter_has_next(elems[0..1], scope);
+            var condition = scope.result() orelse unreachable;
+            var call_args = try scope.allocator.alloc(Expression, 1);
+            defer scope.allocator.free(call_args);
+            while (condition == .boolean and condition.boolean.value) {
+                try iter_next(elems[0..1], scope);
+                const tmp = scope.result() orelse unreachable;
+                call_args[0] = tmp;
+                try exec_runtime_function(func, call_args, scope);
+                if (scope.result()) |r| {
+                    if (r == .boolean and r.boolean.value) {
+                        scope.return_result = try tmp.clone(scope.allocator);
+                        return;
+                    }
+                } else {
+                    return Error.ValueNotFound;
+                }
+                try iter_has_next(elems[0..1], scope);
+                condition = scope.result() orelse unreachable;
+            }
+            scope.return_result = try default_value.clone(scope.allocator);
+        },
         else => return Error.NotImplemented,
     }
 }
