@@ -853,7 +853,12 @@ pub fn default_iterator(args: []const Expression, scope: *Scope) Error!void {
             tmp[DEFAULT_DATA_INDEX] = args[0];
             tmp[DEFAULT_INDEX] = .{ .number = .{ .integer = 0 } };
             const data_expr = try expression.Array.init(scope.allocator, tmp);
-            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &default_next, &default_has_next, data_expr);
+            scope.return_result = try expression.Iterator.initBuiltin(
+                scope.allocator,
+                &default_next,
+                &default_has_next,
+                data_expr,
+            );
         },
         .dictionary => return Error.NotImplemented,
         else => return Error.InvalidExpressoinType,
