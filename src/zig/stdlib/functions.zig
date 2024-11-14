@@ -638,6 +638,31 @@ pub fn filter(args: []const Expression, scope: *Scope) Error!void {
     }
 }
 
+fn zip_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    const out = try scope.allocator.alloc(Expression, local_data.len);
+    for (local_data, 0..) |*iter, index| {
+        try iter_next(iter[0..1], scope);
+        const value = scope.result() orelse unreachable;
+        out[index] = value;
+    }
+    scope.return_result = try expression.Array.init(scope.allocator, out);
+}
+
+fn zip_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    var all_true = true;
+    for (local_data) |*iter| {
+        try iter_has_next(iter[0..1], scope);
+        const condition = scope.result() orelse unreachable;
+        std.debug.assert(condition == .boolean);
+        all_true = all_true and condition.boolean.value;
+    }
+    scope.return_result = try expression.Boolean.init(scope.allocator, all_true);
+}
+
 pub fn zip(args: []const Expression, scope: *Scope) Error!void {
     const left_elements = args[0];
     const right_elements = args[1];
@@ -654,6 +679,19 @@ pub fn zip(args: []const Expression, scope: *Scope) Error!void {
             t.* = .{ .array = expression.Array{ .elements = out } };
         }
         scope.return_result = try expression.Array.init(scope.allocator, tmp);
+        return;
+    }
+
+    if (left_elements == .iterator and right_elements == .iterator) {
+        var tmp = std.ArrayList(Expression).init(scope.allocator);
+        try tmp.appendSlice(args);
+        const data_expr = try expression.Array.init(scope.allocator, try tmp.toOwnedSlice());
+        scope.return_result = try expression.Iterator.initBuiltin(
+            scope.allocator,
+            &zip_next,
+            &zip_has_next,
+            data_expr,
+        );
         return;
     }
 
