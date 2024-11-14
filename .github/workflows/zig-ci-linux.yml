@@ -1,0 +1,102 @@
+
+name: Zig CI Linux
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+env:
+  YADL_LINUX: zig-out/bin/yadl-linux
+  YADL_MAC: zig-out/bin/yadl-mac
+  YADL_WIN: zig-out/bin/yadl-win
+
+jobs:
+  build:
+    name: Zig Build on Linux
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest ziglang
+    - name: Zig build
+      run: python -m ziglang build
+    - name: Cache Zig artifacts
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-zig_build-${{ github.ref_name }}-${{ env.cache-name }}
+        restore-keys: |
+          ${{ runner.os }}-zig_build-${{ github.ref_name }}-
+          ${{ runner.os }}-zig_build-
+        path: |
+          ~/zig-out
+          ~/.zig-cache
+
+  unit-test:
+    name: Zig Unit Tests for Linux
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest ziglang
+    - name: Zig build
+      run: python -m ziglang test
+    - name: Cache Zig artifacts
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-${{ github.ref_name }}-${{ env.cache-name }}
+        restore-keys: |
+          ${{ runner.os }}-zig_build-${{ github.ref_name }}-
+          ${{ runner.os }}-zig_build-
+        path: |
+          ~/zig-out
+          ~/.zig-cache
+
+  pytest:
+    name: pytest Tests for Linux
+    runs-on: ubuntu-latest
+    needs: unit-test
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest ziglang
+    - name: Zig build
+      run: python -m pytest
+    - name: Cache Zig artifacts
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-${{ github.ref_name }}-${{ env.cache-name }}
+        restore-keys: |
+          ${{ runner.os }}-zig_build-${{ github.ref_name }}-
+          ${{ runner.os }}-zig_build-
+        path: |
+          ~/zig-out
+          ~/.zig-cache
+
+    
