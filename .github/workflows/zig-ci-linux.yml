@@ -98,5 +98,5 @@ jobs:
           ~/zig-out
           ~/.zig-cache
     - name: Zig build
-      run: python -m pytest
+      run: python -m pytest test-scripts/zig/*
     
