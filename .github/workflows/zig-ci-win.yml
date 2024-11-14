@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  YADL_WIN: zig-out/bin/yadl-win
+  YADL_WIN: "zig-out/bin/yadl-win.exe"
 
 jobs:
   build:
