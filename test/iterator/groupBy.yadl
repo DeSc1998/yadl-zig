@@ -19,7 +19,23 @@ d = {
 iter = groupBy(iterator(next, has_next, d), is_even)
 
 while (has_next(iter)) {
-    print(next(iter))
+    tmp = next(iter)
+    print( 'key:', tmp['key'] )
+    values = tmp['values']
+    while (has_next(values)) {
+        print(next(values))
+    }
 }
-// TODO: what should the groupBy-iterator return for elements?
-// CHECK-OUT: {false: [1, 3, 5, 7, 9], true: [2, 4, 6, 8, 10]}
+
+// CHECK-OUT: key: false
+// CHECK-OUT: 1
+// CHECK-OUT: 3
+// CHECK-OUT: 5
+// CHECK-OUT: 7
+// CHECK-OUT: 9
+// CHECK-OUT: key: true
+// CHECK-OUT: 2
+// CHECK-OUT: 4
+// CHECK-OUT: 6
+// CHECK-OUT: 8
+// CHECK-OUT: 10
