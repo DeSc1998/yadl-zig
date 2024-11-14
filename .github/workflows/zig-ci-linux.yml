@@ -58,18 +58,19 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest ziglang
-    - name: Zig build
-      run: python -m ziglang test
     - name: Cache Zig artifacts
       uses: actions/cache@v4
       with:
-        key: ${{ runner.os }}-${{ github.ref_name }}-${{ env.cache-name }}
+        key: ${{ runner.os }}-zig_build-${{ github.ref_name }}-${{ env.cache-name }}
         restore-keys: |
           ${{ runner.os }}-zig_build-${{ github.ref_name }}-
           ${{ runner.os }}-zig_build-
         path: |
           ~/zig-out
           ~/.zig-cache
+    - name: parser.zig unit tests
+      run: python -m ziglang test src/zig/parser.zig
+    
 
   pytest:
     name: pytest Tests for Linux
@@ -86,17 +87,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest ziglang
-    - name: Zig build
-      run: python -m pytest
     - name: Cache Zig artifacts
       uses: actions/cache@v4
       with:
-        key: ${{ runner.os }}-${{ github.ref_name }}-${{ env.cache-name }}
+        key: ${{ runner.os }}-zig_build-${{ github.ref_name }}-${{ env.cache-name }}
         restore-keys: |
           ${{ runner.os }}-zig_build-${{ github.ref_name }}-
           ${{ runner.os }}-zig_build-
         path: |
           ~/zig-out
           ~/.zig-cache
-
+    - name: Zig build
+      run: python -m pytest
     
