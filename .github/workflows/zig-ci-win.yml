@@ -32,5 +32,5 @@ jobs:
     - name: parser.zig unit tests
       run: python -m ziglang test src/zig/parser.zig
     - name: Runnning pytest
-      run: python -m pytest test-scripts/zig/*
+      run: python -m pytest test-scripts\\zig\\*.py
  
