@@ -29,6 +29,10 @@ jobs:
         pip install pytest ziglang
     - name: Zig build
       run: python -m ziglang build
+    - name: listing dirs
+      run: dir
+    - name: listing dir 'zig-out'
+      run: dir zig-out && dir
     - name: parser.zig unit tests
       run: python -m ziglang test src/zig/parser.zig
     - name: Runnning pytest
