@@ -1007,3 +1007,26 @@ pub fn iter_has_next(args: []const Expression, scope: *Scope) Error!void {
         },
     }
 }
+
+pub fn array_append(args: []const Expression, scope: *Scope) Error!void {
+    std.debug.assert(args.len == 2);
+    std.debug.assert(args[0] == .array);
+
+    const out = try scope.allocator.alloc(Expression, args[0].array.elements.len + 1);
+    @memcpy(out, args[0].array.elements);
+    out[args[0].array.elements.len] = args[1];
+    scope.return_result = try expression.Array.init(scope.allocator, out);
+}
+
+pub fn array_contains(args: []const Expression, scope: *Scope) Error!void {
+    std.debug.assert(args.len == 2);
+    std.debug.assert(args[0] == .array);
+
+    for (args[0].array.elements) |elem| {
+        if (elem.eql(args[1])) {
+            scope.return_result = try expression.Boolean.init(scope.allocator, true);
+            return;
+        }
+    }
+    scope.return_result = try expression.Boolean.init(scope.allocator, false);
+}
