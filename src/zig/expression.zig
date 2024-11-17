@@ -270,6 +270,10 @@ pub const Iterator = struct {
         runtime: Function,
         builtin: stdlibType.HasNextFn,
     },
+    peek_fn: ?union(enum) {
+        runtime: Function,
+        builtin: stdlibType.PeekFn,
+    } = null,
     data: *Expression,
 
     pub fn init(
@@ -291,12 +295,14 @@ pub const Iterator = struct {
         alloc: std.mem.Allocator,
         next_fn: stdlibType.NextFn,
         has_next_fn: stdlibType.HasNextFn,
+        peek_fn: stdlibType.PeekFn,
         data: *Expression,
     ) !*Expression {
         const out = try alloc.create(Expression);
         out.* = .{ .iterator = .{
             .next_fn = .{ .builtin = next_fn },
             .has_next_fn = .{ .builtin = has_next_fn },
+            .peek_fn = .{ .builtin = peek_fn },
             .data = data,
         } };
         return out;
