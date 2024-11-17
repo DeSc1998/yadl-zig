@@ -96,6 +96,23 @@ fn map_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
     try exec_runtime_function(func, args, scope);
 }
 
+fn map_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    std.debug.assert(local_data[MAP_DATA_INDEX] == .iterator);
+    std.debug.assert(local_data[MAP_FN_INDEX] == .function);
+    const tmp = try scope.allocator.alloc(Expression, 1);
+    defer scope.allocator.free(tmp);
+    const args = try scope.allocator.alloc(Expression, 1);
+    defer scope.allocator.free(args);
+
+    tmp[0] = local_data[MAP_DATA_INDEX];
+    try iter_peek(tmp, scope);
+    args[0] = scope.result() orelse unreachable;
+    const func = local_data[MAP_FN_INDEX].function;
+    try exec_runtime_function(func, args, scope);
+}
+
 fn map_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
     std.debug.assert(data_expr.* == .array);
     const local_data = data_expr.array.elements;
@@ -134,7 +151,13 @@ pub fn map(args: []const Expression, scope: *Scope) Error!void {
             tmp[MAP_DATA_INDEX] = elements;
             tmp[MAP_FN_INDEX] = callable;
             const data_expr = try expression.Array.init(scope.allocator, tmp);
-            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &map_next, &map_has_next, data_expr);
+            scope.return_result = try expression.Iterator.initBuiltin(
+                scope.allocator,
+                &map_next,
+                &map_has_next,
+                &map_peek,
+                data_expr,
+            );
         },
         else => return Error.NotImplemented,
     }
@@ -164,6 +187,19 @@ fn flatten_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
         local_data[FLATTEN_INTERMEDIATE_INDEX] = scope.result() orelse unreachable;
     }
     try iter_next(local_data[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1], scope);
+}
+
+fn flatten_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    std.debug.assert(local_data[FLATTEN_DATA_INDEX] == .iterator);
+    if (!flatten_iter_has_elements(local_data[FLATTEN_INTERMEDIATE_INDEX], scope)) {
+        try iter_next(local_data[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], scope);
+        const tmp = scope.result_ref() orelse unreachable;
+        try default_iterator(tmp[0..1], scope);
+        local_data[FLATTEN_INTERMEDIATE_INDEX] = scope.result() orelse unreachable;
+    }
+    try iter_peek(local_data[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1], scope);
 }
 
 fn flatten_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
@@ -230,7 +266,13 @@ pub fn flatten(args: []const Expression, scope: *Scope) Error!void {
             tmp[FLATTEN_DATA_INDEX] = lists;
             tmp[FLATTEN_INTERMEDIATE_INDEX] = .{ .none = null };
             const data_expr = try expression.Array.init(scope.allocator, tmp);
-            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &flatten_next, &flatten_has_next, data_expr);
+            scope.return_result = try expression.Iterator.initBuiltin(
+                scope.allocator,
+                &flatten_next,
+                &flatten_has_next,
+                &flatten_peek,
+                data_expr,
+            );
         },
         else => scope.return_result = try lists.clone(scope.allocator),
     }
@@ -320,7 +362,18 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
 
 const GROUP_BY_FN_INDEX = 1;
 const GROUP_BY_DATA_INDEX = 0;
+const GROUP_BY_USED_INDEX = 2;
+const GROUP_BY_TEMP_INDEX = 3;
 fn group_by_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const elements = data_expr.array.elements;
+    std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
+    std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
+    _ = scope;
+    return Error.NotImplemented;
+}
+
+fn group_by_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
     std.debug.assert(data_expr.* == .array);
     const elements = data_expr.array.elements;
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
@@ -384,11 +437,20 @@ pub fn group_by(args: []const Expression, scope: *Scope) Error!void {
             scope.return_result = try expression.Dictionary.init(scope.allocator, try entries.toOwnedSlice());
         },
         .iterator => {
-            const tmp = try scope.allocator.alloc(Expression, 2);
+            const tmp = try scope.allocator.alloc(Expression, 4);
             tmp[GROUP_BY_DATA_INDEX] = elements;
             tmp[GROUP_BY_FN_INDEX] = callable;
+            tmp[GROUP_BY_USED_INDEX] = .{ .array = .{
+                .elements = &[0]Expression{},
+            } };
             const data_expr = try expression.Array.init(scope.allocator, tmp);
-            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &group_by_next, &group_by_has_next, data_expr);
+            scope.return_result = try expression.Iterator.initBuiltin(
+                scope.allocator,
+                &group_by_next,
+                &group_by_has_next,
+                &group_by_peek,
+                data_expr,
+            );
         },
         else => |e| {
             std.debug.print("ERROR: unable to group: '{s}' has no elements or is a single value\n", .{@tagName(e)});
@@ -552,11 +614,50 @@ fn filter_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
         try iter_has_next(iter[0..1], scope);
         result = scope.result_ref() orelse unreachable;
         if (!result.boolean.value) {
-            scope.return_result = result;
+            const tmp = try scope.allocator.create(Expression);
+            tmp.* = .{ .none = null };
+            scope.return_result = tmp;
             return;
         }
 
         try iter_next(iter[0..1], scope);
+        out = scope.result_ref() orelse unreachable;
+        try exec_runtime_function(func, out[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+    }
+    scope.return_result = out;
+}
+
+fn filter_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const elements = data_expr.array.elements;
+    std.debug.assert(elements[FILTER_FN_INDEX] == .function);
+    std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
+    const iter = &elements[FILTER_DATA_INDEX];
+    const func = elements[FILTER_FN_INDEX].function;
+    try iter_has_next(iter[0..1], scope);
+    var result = scope.result_ref() orelse unreachable;
+    if (!result.boolean.value) {
+        scope.return_result = result;
+        return;
+    }
+
+    try iter_peek(iter[0..1], scope);
+    var out = scope.result_ref() orelse unreachable;
+    try exec_runtime_function(func, out[0..1], scope);
+    result = scope.result_ref() orelse unreachable;
+    while (result.* == .boolean and !result.boolean.value) {
+        try iter_next(iter[0..1], scope);
+        try iter_has_next(iter[0..1], scope);
+        result = scope.result_ref() orelse unreachable;
+        if (!result.boolean.value) {
+            const tmp = try scope.allocator.create(Expression);
+            tmp.* = .{ .none = null };
+            scope.return_result = tmp;
+            return;
+        }
+
+        try iter_peek(iter[0..1], scope);
         out = scope.result_ref() orelse unreachable;
         try exec_runtime_function(func, out[0..1], scope);
         result = scope.result_ref() orelse unreachable;
@@ -632,7 +733,13 @@ pub fn filter(args: []const Expression, scope: *Scope) Error!void {
             tmp[FILTER_DATA_INDEX] = elements;
             tmp[FILTER_FN_INDEX] = callable;
             const data_expr = try expression.Array.init(scope.allocator, tmp);
-            scope.return_result = try expression.Iterator.initBuiltin(scope.allocator, &filter_next, &filter_has_next, data_expr);
+            scope.return_result = try expression.Iterator.initBuiltin(
+                scope.allocator,
+                &filter_next,
+                &filter_has_next,
+                &filter_peek,
+                data_expr,
+            );
         },
         else => return Error.NotImplemented,
     }
@@ -644,6 +751,18 @@ fn zip_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
     const out = try scope.allocator.alloc(Expression, local_data.len);
     for (local_data, 0..) |*iter, index| {
         try iter_next(iter[0..1], scope);
+        const value = scope.result() orelse unreachable;
+        out[index] = value;
+    }
+    scope.return_result = try expression.Array.init(scope.allocator, out);
+}
+
+fn zip_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    const out = try scope.allocator.alloc(Expression, local_data.len);
+    for (local_data, 0..) |*iter, index| {
+        try iter_peek(iter[0..1], scope);
         const value = scope.result() orelse unreachable;
         out[index] = value;
     }
@@ -690,6 +809,7 @@ pub fn zip(args: []const Expression, scope: *Scope) Error!void {
             scope.allocator,
             &zip_next,
             &zip_has_next,
+            &zip_peek,
             data_expr,
         );
         return;
@@ -889,6 +1009,23 @@ fn default_next(data_expr: *Expression, scope: *Scope) Error!void {
     }
 }
 
+fn default_peek(data_expr: *Expression, scope: *Scope) Error!void {
+    std.debug.assert(data_expr.* == .array);
+    const local_data = data_expr.array.elements;
+    switch (local_data[DEFAULT_DATA_INDEX]) {
+        .array => |a| {
+            std.debug.assert(local_data[DEFAULT_INDEX] == .number);
+            std.debug.assert(local_data[DEFAULT_INDEX].number == .integer);
+            const index = local_data[DEFAULT_INDEX];
+            const i: usize = @intCast(index.number.integer);
+            scope.return_result = try a.elements[i].clone(scope.allocator);
+            expression.free_local(scope.allocator, index);
+        },
+        .dictionary => return Error.NotImplemented,
+        else => return Error.InvalidExpressoinType,
+    }
+}
+
 fn default_has_next(data_expr: *Expression, scope: *Scope) Error!void {
     std.debug.assert(data_expr.* == .array);
     const local_data = data_expr.array.elements;
@@ -919,6 +1056,7 @@ pub fn default_iterator(args: []const Expression, scope: *Scope) Error!void {
                 scope.allocator,
                 &default_next,
                 &default_has_next,
+                &default_peek,
                 data_expr,
             );
         },
@@ -980,6 +1118,37 @@ pub fn iter_next(args: []const Expression, scope: *Scope) Error!void {
         .builtin => |f| {
             try f(iter.iterator.data, scope);
         },
+    }
+}
+
+pub fn iter_peek(args: []const Expression, scope: *Scope) Error!void {
+    const iter = args[0];
+    std.debug.assert(iter == .iterator);
+
+    if (iter.iterator.peek_fn) |func| {
+        switch (func) {
+            .runtime => |f| {
+                const tmp = try scope.allocator.alloc(Expression, 1);
+                defer scope.allocator.free(tmp);
+                tmp[0] = iter.iterator.data.*;
+                var local = try Scope.init(scope.allocator, scope.out, scope, f.args, tmp);
+                for (f.body) |st| {
+                    try interpreter.evalStatement(st, &local);
+                }
+                if (local.result_ref()) |res| {
+                    scope.return_result = res;
+                } else {
+                    return Error.ValueNotFound;
+                }
+            },
+            .builtin => |f| {
+                try f(iter.iterator.data, scope);
+            },
+        }
+    } else {
+        const out = try scope.allocator.create(Expression);
+        out.* = .{ .none = null };
+        scope.return_result = out;
     }
 }
 
