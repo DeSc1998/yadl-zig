@@ -424,7 +424,13 @@ pub const Expression = union(enum) {
             .iterator => |iter| b: {
                 const tmp = try iter.data.clone(alloc);
                 if (iter.next_fn == .builtin) {
-                    break :b try Iterator.initBuiltin(alloc, iter.next_fn.builtin, iter.has_next_fn.builtin, tmp);
+                    break :b try Iterator.initBuiltin(
+                        alloc,
+                        iter.next_fn.builtin,
+                        iter.has_next_fn.builtin,
+                        if (iter.peek_fn) |f| f.builtin else unreachable,
+                        tmp,
+                    );
                 } else break :b try Iterator.init(alloc, iter.next_fn.runtime, iter.has_next_fn.runtime, tmp);
             },
             .boolean => |b| try Boolean.init(alloc, b.value),
