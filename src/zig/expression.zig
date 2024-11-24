@@ -329,6 +329,7 @@ pub const Expression = union(enum) {
     pub fn eql(self: Expression, other: Expression) bool {
         return switch (self) {
             .number => |n| if (other == .number) n.eql(other.number) else false,
+            .boolean => |n| if (other == .boolean) n.value == other.boolean.value else false,
             .string => |n| if (other == .string) n.eql(other.string) else false,
             .dictionary => |n| if (other == .dictionary) n.eql(other.dictionary) else if (other == .none) n.entries.len == 0 else false,
             .none => b: {
