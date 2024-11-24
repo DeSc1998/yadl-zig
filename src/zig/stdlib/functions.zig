@@ -676,7 +676,8 @@ fn check(context: Context, args: []const Expression, scope: *Scope) Error!void {
         },
         .iterator => {
             var acc: Context.OutType = context.initial;
-            const elems = &elements;
+            const elems = try elements.clone(scope.allocator);
+            defer expression.free(scope.allocator, elems);
             try iter_has_next(elems[0..1], scope);
             var condition = scope.result() orelse unreachable;
             var call_args = try scope.allocator.alloc(Expression, 1);
