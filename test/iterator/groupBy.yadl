@@ -2,21 +2,7 @@
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 is_even = (n) => n % 2 == 0
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': numbers
-}
-
-iter = groupBy(iterator(next, has_next, d), is_even)
+iter = groupBy(default_iterator(numbers), is_even)
 
 while (has_next(iter)) {
     tmp = next(iter)
