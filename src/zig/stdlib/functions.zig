@@ -1,10 +1,12 @@
 const std = @import("std");
 
 const expression = @import("../expression.zig");
+const statement = @import("../statement.zig");
 const interpreter = @import("../interpreter.zig");
 const data = @import("data.zig");
 const Scope = @import("../scope.zig");
 const Expression = expression.Expression;
+const Statement = statement.Statement;
 
 pub const Error = @import("type.zig").Error;
 
@@ -362,15 +364,83 @@ pub fn reduce(args: []const Expression, scope: *Scope) Error!void {
 
 const GROUP_BY_FN_INDEX = 1;
 const GROUP_BY_DATA_INDEX = 0;
-const GROUP_BY_USED_INDEX = 2;
+const GROUP_BY_SEEN_INDEX = 2;
 const GROUP_BY_TEMP_INDEX = 3;
 fn group_by_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
     std.debug.assert(data_expr.* == .array);
     const elements = data_expr.array.elements;
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
-    _ = scope;
-    return Error.NotImplemented;
+    try iter_peek(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], scope);
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    try exec_runtime_function(
+        elements[GROUP_BY_FN_INDEX].function,
+        elements[GROUP_BY_TEMP_INDEX .. GROUP_BY_TEMP_INDEX + 1],
+        scope,
+    );
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    try array_contains(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
+    var result = scope.result() orelse unreachable;
+    while (result.boolean.value) {
+        try iter_next(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], scope);
+        elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+        try exec_runtime_function(
+            elements[GROUP_BY_FN_INDEX].function,
+            elements[GROUP_BY_TEMP_INDEX .. GROUP_BY_TEMP_INDEX + 1],
+            scope,
+        );
+        elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+        try array_contains(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
+        result = scope.result() orelse unreachable;
+    }
+
+    const filter_fn = try equal_to_key(
+        try elements[GROUP_BY_FN_INDEX].clone(scope.allocator),
+        try elements[GROUP_BY_TEMP_INDEX].clone(scope.allocator),
+        scope,
+    );
+    const filter_tmp = try scope.allocator.alloc(Expression, 2);
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone(scope.allocator);
+    defer scope.allocator.destroy(tmp_iter);
+    filter_tmp[0] = tmp_iter.*;
+    filter_tmp[1] = filter_fn.*;
+    try filter(filter_tmp, scope);
+    const filter_iter = scope.result_ref() orelse unreachable;
+    const entries = try scope.allocator.alloc(expression.DictionaryEntry, 2);
+    entries[0] = .{
+        .key = try expression.String.init(scope.allocator, "key"),
+        .value = try elements[GROUP_BY_TEMP_INDEX].clone(scope.allocator),
+    };
+    entries[1] = .{
+        .key = try expression.String.init(scope.allocator, "values"),
+        .value = filter_iter,
+    };
+    try array_append(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
+    elements[GROUP_BY_SEEN_INDEX] = scope.result() orelse unreachable;
+    try iter_next(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], scope);
+    scope.return_result = try expression.Dictionary.init(scope.allocator, entries);
+}
+
+fn equal_to_key(groupper: *Expression, key: *Expression, scope: *Scope) !*Expression {
+    const tmp = try expression.Identifier.init(scope.allocator, "tmp");
+    const id = try expression.Identifier.init(scope.allocator, "x");
+    const bin = try expression.BinaryOp.init(
+        scope.allocator,
+        .{ .compare = .Equal },
+        key,
+        tmp,
+    );
+    const fn_call = try expression.FunctionCall.init(
+        scope.allocator,
+        groupper,
+        id[0..1],
+    );
+    const args = try scope.allocator.alloc(expression.Identifier, 1);
+    args[0] = .{ .name = "x" };
+    const sts = try scope.allocator.alloc(Statement, 2);
+    sts[0] = .{ .assignment = .{ .varName = tmp.identifier, .value = fn_call } };
+    sts[1] = .{ .@"return" = .{ .value = bin } };
+    return expression.Function.init(scope.allocator, args, sts);
 }
 
 fn group_by_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
@@ -378,8 +448,36 @@ fn group_by_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
     const elements = data_expr.array.elements;
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
-    _ = scope;
-    return Error.NotImplemented;
+    try iter_peek(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], scope);
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    try exec_runtime_function(
+        elements[GROUP_BY_FN_INDEX].function,
+        elements[GROUP_BY_TEMP_INDEX .. GROUP_BY_TEMP_INDEX + 1],
+        scope,
+    );
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    const filter_fn = try equal_to_key(
+        try elements[GROUP_BY_FN_INDEX].clone(scope.allocator),
+        try elements[GROUP_BY_TEMP_INDEX].clone(scope.allocator),
+        scope,
+    );
+    const filter_tmp = try scope.allocator.alloc(Expression, 2);
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone(scope.allocator);
+    defer scope.allocator.destroy(tmp_iter);
+    filter_tmp[0] = tmp_iter.*;
+    filter_tmp[1] = filter_fn.*;
+    try filter(filter_tmp, scope);
+    const filter_iter = scope.result_ref() orelse unreachable;
+    const entries = try scope.allocator.alloc(expression.DictionaryEntry, 2);
+    entries[0] = .{
+        .key = try expression.String.init(scope.allocator, "key"),
+        .value = try elements[GROUP_BY_TEMP_INDEX].clone(scope.allocator),
+    };
+    entries[1] = .{
+        .key = try expression.String.init(scope.allocator, "values"),
+        .value = filter_iter,
+    };
+    scope.return_result = try expression.Dictionary.init(scope.allocator, entries);
 }
 
 fn group_by_has_next(data_expr: *expression.Expression, scope: *Scope) Error!void {
@@ -387,8 +485,43 @@ fn group_by_has_next(data_expr: *expression.Expression, scope: *Scope) Error!voi
     const elements = data_expr.array.elements;
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
-    _ = scope;
-    return Error.NotImplemented;
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone(scope.allocator);
+    try iter_has_next(tmp_iter[0..1], scope);
+    var result = scope.result() orelse unreachable;
+    if (result == .boolean and !result.boolean.value) {
+        scope.return_result = try expression.Boolean.init(scope.allocator, false);
+        return;
+    }
+    try iter_peek(tmp_iter[0..1], scope);
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    try exec_runtime_function(
+        elements[GROUP_BY_FN_INDEX].function,
+        elements[GROUP_BY_TEMP_INDEX .. GROUP_BY_TEMP_INDEX + 1],
+        scope,
+    );
+    elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+    try array_contains(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
+    result = scope.result() orelse unreachable;
+    while (result == .boolean and result.boolean.value) {
+        try iter_has_next(tmp_iter[0..1], scope);
+        result = scope.result() orelse unreachable;
+        if (result == .boolean and !result.boolean.value) {
+            scope.return_result = try expression.Boolean.init(scope.allocator, false);
+            return;
+        }
+        try iter_next(tmp_iter[0..1], scope);
+        elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+        try exec_runtime_function(
+            elements[GROUP_BY_FN_INDEX].function,
+            elements[GROUP_BY_TEMP_INDEX .. GROUP_BY_TEMP_INDEX + 1],
+            scope,
+        );
+        elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
+        try array_contains(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
+        result = scope.result() orelse unreachable;
+    }
+
+    scope.return_result = try expression.Boolean.init(scope.allocator, true);
 }
 
 pub fn group_by(args: []const Expression, scope: *Scope) Error!void {
@@ -440,7 +573,7 @@ pub fn group_by(args: []const Expression, scope: *Scope) Error!void {
             const tmp = try scope.allocator.alloc(Expression, 4);
             tmp[GROUP_BY_DATA_INDEX] = elements;
             tmp[GROUP_BY_FN_INDEX] = callable;
-            tmp[GROUP_BY_USED_INDEX] = .{ .array = .{
+            tmp[GROUP_BY_SEEN_INDEX] = .{ .array = .{
                 .elements = &[0]Expression{},
             } };
             const data_expr = try expression.Array.init(scope.allocator, tmp);
@@ -1131,15 +1264,7 @@ pub fn iter_peek(args: []const Expression, scope: *Scope) Error!void {
                 const tmp = try scope.allocator.alloc(Expression, 1);
                 defer scope.allocator.free(tmp);
                 tmp[0] = iter.iterator.data.*;
-                var local = try Scope.init(scope.allocator, scope.out, scope, f.args, tmp);
-                for (f.body) |st| {
-                    try interpreter.evalStatement(st, &local);
-                }
-                if (local.result_ref()) |res| {
-                    scope.return_result = res;
-                } else {
-                    return Error.ValueNotFound;
-                }
+                try exec_runtime_function(f, iter.iterator.data[0..1], scope);
             },
             .builtin => |f| {
                 try f(iter.iterator.data, scope);
@@ -1182,7 +1307,7 @@ pub fn array_append(args: []const Expression, scope: *Scope) Error!void {
     std.debug.assert(args[0] == .array);
 
     const out = try scope.allocator.alloc(Expression, args[0].array.elements.len + 1);
-    @memcpy(out, args[0].array.elements);
+    @memcpy(out[0..args[0].array.elements.len], args[0].array.elements);
     out[args[0].array.elements.len] = args[1];
     scope.return_result = try expression.Array.init(scope.allocator, out);
 }
