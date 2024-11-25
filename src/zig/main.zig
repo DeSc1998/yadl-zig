@@ -35,11 +35,8 @@ pub fn main() !void {
 
         var parser = Parser.init(input, allocator);
 
-        const stmts = parser.parse() catch |err| {
-            if (err != Parser.Error.EndOfFile and err != Parser.Error.UnexpectedToken)
-                return err;
-            std.process.exit(1);
-        };
+        const stmts = try parser.parse();
+
         var scope = Scope.empty(allocator, stdout.any());
         // std.debug.print("INFO: memory usage (byte): {}\n", .{arena.queryCapacity()});
 
