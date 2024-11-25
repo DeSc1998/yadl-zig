@@ -786,7 +786,7 @@ fn parseStatements(self: *Self, should_ignore_paran: bool) Error![]stmt.Statemen
     return stmts.toOwnedSlice();
 }
 
-/// Returns an owned slice of Statements which must be
+/// Returns an owned slice of Statements which each must be
 /// freed with `fn free(std.mem.Allocator, Statement)` in statements.zig
 pub fn parse(self: *Self) Error![]stmt.Statement {
     return self.parseStatements(false);
