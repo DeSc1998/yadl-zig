@@ -71,7 +71,7 @@ def parse_yadl(filepath):
 def run_test(test_cfg):
     print("trying to execute file:", test_cfg["filepath"])
     result = subprocess.run(
-        test_cfg["run"], capture_output=True, shell=True, text=True)
+        test_cfg["run"], capture_output=True, shell=True, text=True, timeout=5)
 
     # check output
     output = result.stdout.strip().split("\n")

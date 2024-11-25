@@ -11,3 +11,4 @@ pub const Error = error{
 pub const StdlibFn = *const fn ([]const expression.Expression, *Scope) Error!void;
 pub const NextFn = *const fn (*expression.Expression, *Scope) Error!void;
 pub const HasNextFn = *const fn (*expression.Expression, *Scope) Error!void;
+pub const PeekFn = *const fn (*expression.Expression, *Scope) Error!void;
