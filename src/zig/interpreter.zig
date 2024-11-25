@@ -248,6 +248,9 @@ pub fn printValue(value: Expression, scope: *Scope) Error!void {
             std.debug.assert(string == .string);
             scope.out.print("{s}", .{string.string.value}) catch return Error.IOWrite;
         },
+        .iterator => {
+            scope.out.print("<{s}>", .{@tagName(value)}) catch return Error.IOWrite;
+        },
         else => |v| {
             std.debug.print("TODO: printing of value: {s}\n", .{@tagName(v)});
             return Error.NotImplemented;

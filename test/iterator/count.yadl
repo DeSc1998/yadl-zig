@@ -23,9 +23,11 @@ d = {
    'list': lst
 }
 
-
-print(count(iterator(next, has_next, d), is_even))
+iter = iterator(next, has_next, d)
+print(count(iter, is_even))
+print(count(iter, is_even))
 print(count(iterator(next, has_next, d), is1))
 
+// CHECK-OUT: 2
 // CHECK-OUT: 2
 // CHECK-OUT: 1

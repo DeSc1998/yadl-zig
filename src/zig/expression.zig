@@ -270,6 +270,10 @@ pub const Iterator = struct {
         runtime: Function,
         builtin: stdlibType.HasNextFn,
     },
+    peek_fn: ?union(enum) {
+        runtime: Function,
+        builtin: stdlibType.PeekFn,
+    } = null,
     data: *Expression,
 
     pub fn init(
@@ -291,12 +295,14 @@ pub const Iterator = struct {
         alloc: std.mem.Allocator,
         next_fn: stdlibType.NextFn,
         has_next_fn: stdlibType.HasNextFn,
+        peek_fn: stdlibType.PeekFn,
         data: *Expression,
     ) !*Expression {
         const out = try alloc.create(Expression);
         out.* = .{ .iterator = .{
             .next_fn = .{ .builtin = next_fn },
             .has_next_fn = .{ .builtin = has_next_fn },
+            .peek_fn = .{ .builtin = peek_fn },
             .data = data,
         } };
         return out;
@@ -323,6 +329,7 @@ pub const Expression = union(enum) {
     pub fn eql(self: Expression, other: Expression) bool {
         return switch (self) {
             .number => |n| if (other == .number) n.eql(other.number) else false,
+            .boolean => |n| if (other == .boolean) n.value == other.boolean.value else false,
             .string => |n| if (other == .string) n.eql(other.string) else false,
             .dictionary => |n| if (other == .dictionary) n.eql(other.dictionary) else if (other == .none) n.entries.len == 0 else false,
             .none => b: {
@@ -415,6 +422,19 @@ pub const Expression = union(enum) {
                 }
                 break :b try FunctionCall.init(alloc, tmp, args);
             },
+            .iterator => |iter| b: {
+                const tmp = try iter.data.clone(alloc);
+                if (iter.next_fn == .builtin) {
+                    break :b try Iterator.initBuiltin(
+                        alloc,
+                        iter.next_fn.builtin,
+                        iter.has_next_fn.builtin,
+                        if (iter.peek_fn) |f| f.builtin else unreachable,
+                        tmp,
+                    );
+                } else break :b try Iterator.init(alloc, iter.next_fn.runtime, iter.has_next_fn.runtime, tmp);
+            },
+            .boolean => |b| try Boolean.init(alloc, b.value),
             else => |v| {
                 std.debug.print("TODO: clone of {s}\n", .{@tagName(v)});
                 return error.NotImplemented;
