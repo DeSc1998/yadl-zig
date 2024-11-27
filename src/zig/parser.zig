@@ -11,6 +11,11 @@ pub const Error = Lexer.Error || error{
     NumberParsingFailure,
 };
 
+const StatementKind = enum {
+    root_statement,
+    code_block_statement,
+};
+
 tokens: RingBuffer = .{},
 lexer: Lexer,
 allocator: std.mem.Allocator,
@@ -559,7 +564,7 @@ fn parseCodeblock(self: *Self) Error![]stmt.Statement {
     if (Self.parser_diagnostic) {
         std.debug.print("DEBUG: read initial newline in code block\n", .{});
     }
-    const code = try self.parseStatements(true);
+    const code = try self.parseStatements(.code_block_statement);
     _ = try self.expect(.CloseParen, "}");
     return code;
 }
@@ -575,6 +580,10 @@ fn parseBranch(self: *Self) Error!stmt.Branch {
 }
 
 fn parseIfStatement(self: *Self, is_initial_branch: bool) Error!stmt.Statement {
+    if (Self.parser_diagnostic) {
+        std.debug.print("INFO: parsing of if-statement\n", .{});
+    }
+
     if (is_initial_branch) {
         _ = self.expect(.Keyword, "if") catch unreachable;
     }
@@ -708,12 +717,15 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
         }
 
         const st = try switch (token.kind) {
-            .Keyword => if (token.chars[0] == 'r')
-                self.parseReturn()
-            else if (token.chars[0] == 'i')
-                self.parseIfStatement(true)
-            else
-                self.parseWhileloop(),
+            .Keyword => b: {
+                if (token.chars[0] == 'r') {
+                    break :b self.parseReturn();
+                } else if (token.chars[0] == 'i') {
+                    break :b self.parseIfStatement(true);
+                } else if (token.chars[0] == 'w') {
+                    break :b self.parseWhileloop();
+                } else break :b Error.UnexpectedToken;
+            },
             .Identifier => if (self.nextToken()) |t| (if (t.kind == .OpenParen and t.chars[0] == '(')
                 self.parseFunctionCall()
             else if (t.kind == .OpenParen and t.chars[0] == '[')
@@ -749,7 +761,7 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
     unreachable;
 }
 
-fn parseStatements(self: *Self, should_ignore_paran: bool) Error![]stmt.Statement {
+fn parseStatements(self: *Self, statement_kind: StatementKind) Error![]stmt.Statement {
     var stmts = std.ArrayList(stmt.Statement).init(self.allocator);
     while (self.parseStatement()) |statement| {
         try stmts.append(statement);
@@ -761,9 +773,14 @@ fn parseStatements(self: *Self, should_ignore_paran: bool) Error![]stmt.Statemen
         if (err != Error.EndOfFile and err != Error.UnexpectedToken)
             return err;
 
-        if (err == Error.UnexpectedToken and !should_ignore_paran) {
+        if (err == Error.EndOfFile and statement_kind == .root_statement) {
+            return stmts.toOwnedSlice();
+        } else if (err == Error.EndOfFile)
+            return err;
+
+        if (err == Error.UnexpectedToken) {
             const token = self.currentToken() orelse unreachable;
-            if (std.mem.eql(u8, token.chars, "}") and should_ignore_paran)
+            if (std.mem.eql(u8, token.chars, "}") and statement_kind != .root_statement)
                 return stmts.toOwnedSlice();
 
             if (self.last_expected) |kind| {
@@ -781,15 +798,16 @@ fn parseStatements(self: *Self, should_ignore_paran: bool) Error![]stmt.Statemen
                     null,
                 );
             }
+            return err;
         }
     }
-    return stmts.toOwnedSlice();
+    unreachable;
 }
 
 /// Returns an owned slice of Statements which each must be
 /// freed with `fn free(std.mem.Allocator, Statement)` in statements.zig
 pub fn parse(self: *Self) Error![]stmt.Statement {
-    return self.parseStatements(false);
+    return self.parseStatements(.root_statement);
 }
 
 test "simple assignment" {

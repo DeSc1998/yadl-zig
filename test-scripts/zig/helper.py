@@ -98,7 +98,7 @@ def run_test(test_cfg):
 def run_failing_test(test_cfg):
     print("trying to execute file:", test_cfg["filepath"])
     try:
-        result = subprocess.run(
+        subprocess.run(
             test_cfg["run"],
             capture_output=True,
             shell=True,

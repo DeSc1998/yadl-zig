@@ -35,7 +35,12 @@ pub fn main() !void {
 
         var parser = Parser.init(input, allocator);
 
-        const stmts = try parser.parse();
+        const stmts = parser.parse() catch |err| {
+            if (err == Parser.Error.EndOfFile) {
+                try stdout.print("ERROR: unexpected end of file\n", .{});
+            }
+            return err;
+        };
 
         var scope = Scope.empty(allocator, stdout.any());
         // std.debug.print("INFO: memory usage (byte): {}\n", .{arena.queryCapacity()});
