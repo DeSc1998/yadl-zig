@@ -28,6 +28,14 @@ saving data like csv out of the box.
 
 ## Quick Start <a name="quick"></a>
 
+Simply run to build:
+
+```shell
+> zig build run -- <files...>
+```
+
+This will run the `run`-task defined is `build.zig` and add `<files...>` as arguments.
+
 ## Build Instructions <a name="build"></a>
 
 ### Prerequisites <a name="pre"></a>
