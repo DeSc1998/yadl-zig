@@ -42,8 +42,8 @@ jobs:
           ~/.zig-cache
     - name: Zig build
       run: python -m ziglang build
-    - name: parser.zig unit tests
-      run: python -m ziglang test src/zig/parser.zig
-    - name: Zig build
+    - name: Zig unit tests
+      run: python -m ziglang build test --summary all
+    - name: pytest step
       run: python -m pytest test-scripts/zig/*
  
