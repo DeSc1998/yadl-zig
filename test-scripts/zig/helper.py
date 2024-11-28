@@ -113,15 +113,14 @@ def run_failing_test(test_cfg):
         for line in output:
             print(" ", line)
 
-        if e.returncode != 0:
-            if test_cfg["out"] == output:
-                print("outputs are as expected")
-            else:
-                print("outputs are different")
+        if test_cfg["out"] == output:
+            print("outputs are as expected")
+        else:
+            print("outputs are different")
 
-            # for diagnostic
-            print("error of the program:")
-            print(e.stderr)
+        # for diagnostic
+        print("error of the program:")
+        print(e.stderr)
 
 
 def to_dir(config, path):
