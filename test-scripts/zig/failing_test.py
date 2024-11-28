@@ -13,7 +13,6 @@ file_names = map(lambda t: to_dir(t[0], t[1]), configurations)
 
 
 @pytest.mark.parametrize("config", configurations, ids=file_names)
-# @pytest.mark.xfail(strict=True)
 def test_config(config):
     run_failing_test(config[0])
 
