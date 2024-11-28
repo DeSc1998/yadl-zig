@@ -16,6 +16,11 @@ const StatementKind = enum {
     code_block_statement,
 };
 
+const IfKind = enum {
+    initial_branch,
+    follow_up_branch,
+};
+
 tokens: RingBuffer = .{},
 lexer: Lexer,
 allocator: std.mem.Allocator,
@@ -580,20 +585,24 @@ fn parseBranch(self: *Self) Error!stmt.Branch {
     };
 }
 
-fn parseIfStatement(self: *Self, is_initial_branch: bool) Error!stmt.Statement {
+fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
     if (Self.parser_diagnostic) {
         std.debug.print("INFO: parsing of if-statement\n", .{});
     }
 
-    if (is_initial_branch) {
-        _ = self.expect(.Keyword, "if") catch unreachable;
+    if (kind == .initial_branch) {
+        _ = try self.expect(.Keyword, "if");
     }
 
     const branch = try self.parseBranch();
+    errdefer expr.free(self.allocator, branch.condition);
+    errdefer self.allocator.free(branch.body);
+    errdefer for (branch.body) |st| stmt.free(self.allocator, st);
+
 
     _ = self.expect(.Newline, null) catch {};
     if (self.expect(.Keyword, "elif")) |_| {
-        const tmp = try self.parseIfStatement(false);
+        const tmp = try self.parseIfStatement(.follow_up_branch);
         const stmts = try self.allocator.alloc(stmt.Statement, 1);
         stmts[0] = tmp;
         return .{ .if_statement = .{
@@ -601,10 +610,10 @@ fn parseIfStatement(self: *Self, is_initial_branch: bool) Error!stmt.Statement {
             .elseBranch = stmts,
         } };
     } else |e| {
-        if (e != Error.UnexpectedToken and e != Error.EndOfFile) return e;
+        if (e != Error.UnexpectedToken) return e;
 
         _ = self.expect(.Keyword, "else") catch |err| {
-            if (err != Error.UnexpectedToken and err != Error.EndOfFile)
+            if (err != Error.UnexpectedToken)
                 return err;
 
             return .{ .if_statement = .{
@@ -722,7 +731,7 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
                 if (token.chars[0] == 'r') {
                     break :b self.parseReturn();
                 } else if (token.chars[0] == 'i') {
-                    break :b self.parseIfStatement(true);
+                    break :b self.parseIfStatement(.initial_branch);
                 } else if (token.chars[0] == 'w') {
                     break :b self.parseWhileloop();
                 } else break :b Error.UnexpectedToken;
