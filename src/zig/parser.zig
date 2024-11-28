@@ -594,13 +594,19 @@ fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
         _ = try self.expect(.Keyword, "if");
     }
 
-    const branch = try self.parseBranch();
+    const branch = self.parseBranch() catch |err| {
+        if (err == Error.EndOfFile) {
+            self.last_expected = .CloseParen;
+            self.last_expected_chars = "}";
+            return Error.UnexpectedToken;
+        } else return err;
+    };
     errdefer expr.free(self.allocator, branch.condition);
     errdefer self.allocator.free(branch.body);
     errdefer for (branch.body) |st| stmt.free(self.allocator, st);
 
-
     _ = self.expect(.Newline, null) catch {};
+
     if (self.expect(.Keyword, "elif")) |_| {
         const tmp = try self.parseIfStatement(.follow_up_branch);
         const stmts = try self.allocator.alloc(stmt.Statement, 1);
@@ -610,6 +616,12 @@ fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
             .elseBranch = stmts,
         } };
     } else |e| {
+        if (e == Error.EndOfFile)
+            return .{ .if_statement = .{
+                .ifBranch = branch,
+                .elseBranch = null,
+            } };
+
         if (e != Error.UnexpectedToken) return e;
 
         _ = self.expect(.Keyword, "else") catch |err| {
@@ -622,7 +634,13 @@ fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
             } };
         };
 
-        const elseCode = try self.parseCodeblock();
+        const elseCode = self.parseCodeblock() catch |err| {
+            if (err == Error.EndOfFile) {
+                self.last_expected = .CloseParen;
+                self.last_expected_chars = "}";
+                return Error.UnexpectedToken;
+            } else return err;
+        };
 
         return .{ .if_statement = .{
             .ifBranch = branch,
