@@ -22,7 +22,7 @@ allocator: std.mem.Allocator,
 last_expected: ?Kind = null,
 last_expected_chars: ?[]const u8 = null,
 
-var parser_diagnostic: bool = false;
+var parser_diagnostic: bool = true;
 
 const Kind = Lexer.TokenKind;
 const Token = Lexer.Token;
@@ -559,6 +559,7 @@ fn parseCondition(self: *Self) Error!*expr.Expression {
 }
 
 fn parseCodeblock(self: *Self) Error![]stmt.Statement {
+    // @breakpoint();
     _ = try self.expect(.OpenParen, "{");
     _ = try self.expect(.Newline, null);
     if (Self.parser_diagnostic) {
@@ -770,35 +771,34 @@ fn parseStatements(self: *Self, statement_kind: StatementKind) Error![]stmt.Stat
             std.debug.print("INFO: error: {}\n", .{err});
         }
 
-        if (err != Error.EndOfFile and err != Error.UnexpectedToken)
-            return err;
+        switch (err) {
+            Error.EndOfFile => {
+                if (statement_kind == .root_statement) {
+                    return stmts.toOwnedSlice();
+                } else return err;
+            },
+            Error.UnexpectedToken => {
+                const token = self.currentToken() orelse unreachable;
+                if (std.mem.eql(u8, token.chars, "}") and statement_kind == .code_block_statement)
+                    return stmts.toOwnedSlice();
 
-        if (err == Error.EndOfFile and statement_kind == .root_statement) {
-            return stmts.toOwnedSlice();
-        } else if (err == Error.EndOfFile)
-            return err;
-
-        if (err == Error.UnexpectedToken) {
-            const token = self.currentToken() orelse unreachable;
-            if (std.mem.eql(u8, token.chars, "}") and statement_kind != .root_statement)
-                return stmts.toOwnedSlice();
-
-            if (self.last_expected) |kind| {
-                try unexpectedToken(
-                    self.*,
-                    token,
-                    &[_]Lexer.TokenKind{kind},
-                    self.last_expected_chars,
-                );
-            } else {
-                try unexpectedToken(
-                    self.*,
-                    token,
-                    &[_]Lexer.TokenKind{ .Identifier, .Keyword },
-                    null,
-                );
-            }
-            return err;
+                if (self.last_expected) |kind| {
+                    try unexpectedToken(
+                        self.*,
+                        token,
+                        &[_]Lexer.TokenKind{kind},
+                        self.last_expected_chars,
+                    );
+                } else {
+                    try unexpectedToken(
+                        self.*,
+                        token,
+                        &[_]Lexer.TokenKind{ .Identifier, .Keyword },
+                        null,
+                    );
+                }
+            },
+            else => return err,
         }
     }
     unreachable;
