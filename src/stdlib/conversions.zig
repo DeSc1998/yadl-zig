@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const expression = @import("../expression.zig");
-const Scope = @import("../scope.zig");
+const Scope = @import("../Scope.zig");
 const Expression = expression.Expression;
 
 const Error = @import("type.zig").Error;

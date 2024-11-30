@@ -4,7 +4,7 @@ const expression = @import("expression.zig");
 const libtype = @import("stdlib/type.zig");
 const functions = @import("stdlib/functions.zig");
 pub const conversions = @import("stdlib/conversions.zig");
-const Scope = @import("scope.zig");
+const Scope = @import("Scope.zig");
 
 pub const Error = error{
     NotImplemented,

@@ -4,7 +4,7 @@ const expression = @import("../expression.zig");
 const statement = @import("../statement.zig");
 const interpreter = @import("../interpreter.zig");
 const data = @import("data.zig");
-const Scope = @import("../scope.zig");
+const Scope = @import("../Scope.zig");
 const Expression = expression.Expression;
 const Statement = statement.Statement;
 

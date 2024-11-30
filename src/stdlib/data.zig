@@ -86,7 +86,7 @@ pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !*expression.Exp
 }
 
 fn parse_line(line: []const u8, allocator: std.mem.Allocator) ![]expression.Expression {
-    const Lexer = @import("../lexer.zig");
+    const Lexer = @import("../Lexer.zig");
     if (line.len == 0) return error.LineEmpty;
     var splitter = std.mem.split(u8, line, ",");
     var out = std.ArrayList(expression.Expression).init(allocator);

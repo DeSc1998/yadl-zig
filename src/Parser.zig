@@ -1,8 +1,8 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
+const Lexer = @import("Lexer.zig");
 const stmt = @import("statement.zig");
 const expr = @import("expression.zig");
-const RingBuffer = @import("tokenRingBuffer.zig");
+const RingBuffer = @import("TokenRingBuffer.zig");
 
 pub const Error = Lexer.Error || error{
     UnexpectedToken,

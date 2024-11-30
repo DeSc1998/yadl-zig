@@ -2,7 +2,7 @@ const std = @import("std");
 
 const interpreter = @import("../interpreter.zig");
 const expression = @import("../expression.zig");
-const Scope = @import("../scope.zig");
+const Scope = @import("../Scope.zig");
 
 pub const Error = error{
     NotImplemented,

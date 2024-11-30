@@ -1,9 +1,9 @@
 const std = @import("std");
 const stmt = @import("statement.zig");
 const expr = @import("expression.zig");
-const Parser = @import("parser.zig");
+const Parser = @import("Parser.zig");
 
-const Scope = @import("scope.zig");
+const Scope = @import("Scope.zig");
 const stdlib = @import("stdlib.zig");
 
 const Expression = expr.Expression;

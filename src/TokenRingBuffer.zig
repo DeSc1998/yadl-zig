@@ -1,5 +1,5 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
+const Lexer = @import("Lexer.zig");
 
 const Error = error{
     Full,

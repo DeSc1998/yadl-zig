@@ -1,10 +1,10 @@
 const std = @import("std");
-const Parser = @import("parser.zig");
+const Parser = @import("Parser.zig");
 const stmt = @import("statement.zig");
 const interpreter = @import("interpreter.zig");
 const stdlib = @import("stdlib.zig");
 
-const Scope = @import("scope.zig");
+const Scope = @import("Scope.zig");
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
