@@ -1,10 +1,9 @@
-import sys
 import os
 import subprocess
 import filecmp
 from pathlib import Path
 
-DEFAULT_RUN_COMMAND = f"java -jar {os.getenv('YADL_JAR')} '%s'"
+DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_BIN')} '%s'"
 
 
 def parse_yadl(filepath):
@@ -71,7 +70,7 @@ def parse_yadl(filepath):
 def run_test(test_cfg):
     print("trying to execute file:", test_cfg["filepath"])
     result = subprocess.run(
-        test_cfg["run"], capture_output=True, shell=True, text=True, timeout=5)
+        test_cfg["run"], capture_output=True, shell=True, text=True)
 
     # check output
     output = result.stdout.strip().split("\n")
@@ -88,6 +87,34 @@ def run_test(test_cfg):
     # remove files
     for file in test_cfg["remove"]:
         os.remove(file)
+
+
+def run_failing_test(test_cfg):
+    print("trying to execute file:", test_cfg["filepath"])
+    try:
+        subprocess.run(
+            test_cfg["run"],
+            capture_output=True,
+            shell=True,
+            text=True,
+            check=True)
+
+        failing_message = "subprocess succeeded where failure was expected"
+        assert False, failing_message
+    except subprocess.CalledProcessError as e:
+        output = e.stdout.strip().split("\n")
+        print("output of the program before exit:")
+        for line in output:
+            print(" ", line)
+
+        if test_cfg["out"] == output:
+            print("outputs are as expected")
+        else:
+            print("outputs are different")
+
+        # for diagnostic
+        print("error of the program:")
+        print(e.stderr)
 
 
 def to_dir(config, path):
