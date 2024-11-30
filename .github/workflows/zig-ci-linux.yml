@@ -38,7 +38,7 @@ jobs:
     name: Build on Windows
     runs-on: windows-latest
     env:
-      YADL_BIN: zig-out/bin/yadl-win.exe
+      YADL_BIN: .\\zig-out\\bin\\yadl-win.exe
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python 3.10
