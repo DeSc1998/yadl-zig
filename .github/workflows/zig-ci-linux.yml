@@ -11,9 +11,7 @@ permissions:
   contents: read
 
 env:
-  YADL_LINUX: zig-out/bin/yadl-linux
-  YADL_MAC: zig-out/bin/yadl-mac
-  YADL_WIN: zig-out/bin/yadl-win
+  YADL_BIN: zig-out/bin/yadl-linux
 
 jobs:
   build:

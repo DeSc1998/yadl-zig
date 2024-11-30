@@ -1,15 +1,9 @@
-import sys
 import os
 import subprocess
 import filecmp
 from pathlib import Path
 
-if (sys.platform.startswith('linux')):
-    DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_LINUX')} '%s'"
-elif (sys.platform.startswith('win32')):
-    DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_WIN')} '%s'"
-elif (sys.platform.startswith('darwin')):
-    DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_MAC')} '%s'"
+DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_BIN')} '%s'"
 
 
 def parse_yadl(filepath):
