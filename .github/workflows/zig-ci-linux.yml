@@ -1,5 +1,5 @@
 
-name: Zig CI Linux
+name: Zig CI
 
 on:
   push:
@@ -38,12 +38,12 @@ jobs:
           ${{ runner.os }}-zig_build-${{ github.ref_name }}-
           ${{ runner.os }}-zig_build-
         path: |
-          ~/zig-out
-          ~/.zig-cache
+          ./zig-out
+          ./.zig-cache
     - name: Zig build
       run: python -m ziglang build
     - name: Zig unit tests
       run: python -m ziglang build test --summary all
     - name: pytest step
-      run: python -m pytest test-scripts/zig/*
+      run: python -m pytest test-scripts/*
  
