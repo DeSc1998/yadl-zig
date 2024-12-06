@@ -38,7 +38,7 @@ This will run the `run`-task defined in `build.zig` and add `<files...>` as argu
 
 ### tree-sitter parser (optional) <a name="parser"></a>
 
-You can the [tree-sitter parser](https://github.com/DeSc1998/tree-sitter-yadl) for yadl
+You can get the [tree-sitter parser](https://github.com/DeSc1998/tree-sitter-yadl) for yadl
 for syntax highlighting. \
 It is in active development though.
 
