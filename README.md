@@ -18,10 +18,11 @@ saving data like csv out of the box.
 # Table of Contents
 
 1. [Quick Start](#quick)
-2. [Build Instructions](#build)
+    1. [tree-sitter parser](#parser)
+3. [Build Instructions](#build)
     1. [Prerequisites](#pre)
     2. [Building in Terminal/Shell](#build_sh)
-3. [Testing of Code](#testing)
+4. [Testing of Code](#testing)
     1. [Unit testing](#unit)
     1. [Testing with pytest](#python)
 
@@ -34,6 +35,12 @@ Simply run to build:
 ```
 
 This will run the `run`-task defined in `build.zig` and add `<files...>` as arguments.
+
+### tree-sitter parser (optional) <a name="parser"></a>
+
+You can the [tree-sitter parser](https://github.com/DeSc1998/tree-sitter-yadl) for yadl
+for syntax highlighting. \
+It is in active development though.
 
 ## Build Instructions <a name="build"></a>
 
