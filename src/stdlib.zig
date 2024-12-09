@@ -21,6 +21,42 @@ pub const FunctionContext = struct {
     arity: u32,
 };
 
+const Arity = struct {
+    unnamed_count: u32,
+    optionals: [][]const u8 = &[0][]const u8{},
+    has_variadics: bool = false,
+};
+
+pub const CallMatch = struct {
+    unnamed_args: []const Expression,
+    optional_args: []const OptionalArg,
+    var_args: ?[]const Expression,
+
+    const OptionalArg = struct {
+        name: []const u8,
+        expr: Expression,
+    };
+
+    pub fn optional_by_name(self: CallMatch, name: []const u8) ?Expression {
+        for (self.optional_args) |arg| {
+            if (std.mem.eql(u8, arg.name, name)) return arg.expr;
+        }
+        return null;
+    }
+};
+
+pub const MatchError = error{
+    NotEnoughArguments,
+    TooManyArguments,
+    MissplacedArguments,
+};
+
+pub fn match_call_args(exprs: []const Expression, arity: Arity) MatchError!CallMatch {
+    _ = exprs;
+    _ = arity;
+    return MatchError.NotEnoughArguments;
+}
+
 const mappings = .{
     .{ "len", .{ .function = &functions.length, .arity = 1 } },
     .{ "last", .{ .function = &functions.last, .arity = 3 } },
