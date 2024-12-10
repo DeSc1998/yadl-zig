@@ -27,15 +27,15 @@ const Arity = struct {
     has_variadics: bool = false,
 };
 
+const OptionalArg = struct {
+    name: []const u8,
+    expr: Expression,
+};
+
 pub const CallMatch = struct {
     unnamed_args: []const Expression,
     optional_args: []const OptionalArg,
     var_args: ?[]const Expression,
-
-    const OptionalArg = struct {
-        name: []const u8,
-        expr: Expression,
-    };
 
     pub fn optional_by_name(self: CallMatch, name: []const u8) ?Expression {
         for (self.optional_args) |arg| {
@@ -53,12 +53,12 @@ pub const MatchError = error{
 
 pub fn match_call_args(exprs: []const Expression, arity: Arity) MatchError!CallMatch {
     // TODO: add support for optional arguments and variadic arguments
-    if (exprs.len > arity.unnamed_count) return MatchError.TooManyArguments;
-    if (exprs.len > arity.unnamed_count) return MatchError.NotEnoughArguments;
+    if (exprs.len > arity.unnamed_count and !arity.has_variadics) return MatchError.TooManyArguments;
+    if (exprs.len < arity.unnamed_count) return MatchError.NotEnoughArguments;
     return .{
-        .unnamed_args = exprs[0..],
-        .optional_args = &[0]CallMatch.OptionalArg{},
-        .var_args = null,
+        .unnamed_args = exprs[0..arity.unnamed_count],
+        .optional_args = &[0]OptionalArg{},
+        .var_args = if (arity.has_variadics) exprs[arity.unnamed_count..] else null,
     };
 }
 
