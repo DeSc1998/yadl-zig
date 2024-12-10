@@ -1,13 +1,14 @@
 const std = @import("std");
 
 const expression = @import("../expression.zig");
+const libtype = @import("type.zig");
 const Scope = @import("../Scope.zig");
 const Expression = expression.Expression;
 
 const Error = @import("type.zig").Error;
 
-pub fn toBoolean(args: []const Expression, scope: *Scope) Error!void {
-    switch (args[0]) {
+pub fn toBoolean(args: libtype.CallMatch, scope: *Scope) Error!void {
+    switch (args.unnamed_args[0]) {
         .boolean => |b| scope.return_result = try expression.Boolean.init(scope.allocator, b.value),
         .number => |n| scope.return_result = try switch (n) {
             .integer => |i| expression.Boolean.init(scope.allocator, i != 0),
@@ -20,8 +21,8 @@ pub fn toBoolean(args: []const Expression, scope: *Scope) Error!void {
     }
 }
 
-pub fn toNumber(args: []const Expression, scope: *Scope) Error!void {
-    const expr = args[0];
+pub fn toNumber(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const expr = args.unnamed_args[0];
     switch (expr) {
         .boolean => |b| scope.return_result = try expression.Number.init(scope.allocator, i64, @intFromBool(b.value)),
         .number => scope.return_result = try expr.clone(scope.allocator),
@@ -41,9 +42,9 @@ pub fn toNumber(args: []const Expression, scope: *Scope) Error!void {
     }
 }
 
-pub fn toString(args: []const Expression, scope: *Scope) Error!void {
-    const expr = args[0];
-    switch (args[0]) {
+pub fn toString(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const expr = args.unnamed_args[0];
+    switch (expr) {
         .boolean => |b| {
             const out = std.fmt.allocPrint(scope.allocator, "{}", .{b.value}) catch return Error.IOWrite;
             scope.return_result = try expression.String.init(scope.allocator, out);
