@@ -124,14 +124,15 @@ fn modify(strct: *Expression, value: *Expression, scope: *Scope) Error!void {
 }
 
 fn evalStdlibCall(context: stdlib.FunctionContext, evaled_args: []const Expression, scope: *Scope) Error!void {
-    if (context.arity != evaled_args.len) {
+    if (stdlib.match_call_args(evaled_args, context.arity)) |match| {
+        context.function(match, scope) catch unreachable; // TODO: handle error once error values are added
+    } else |err| {
         std.debug.print(
-            "ERROR: incorrect number of arguments: expected {}, but got {}\n",
-            .{ context.arity, evaled_args.len },
+            "ERROR: arguments mismatch expected: {}\n",
+            .{err},
         );
         return Error.ArityMismatch;
     }
-    context.function(evaled_args, scope) catch unreachable; // TODO: handle error once error values are added
 }
 
 pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
@@ -293,7 +294,10 @@ fn evalFormattedString(string: expr.String, scope: *Scope) Error!void {
 
             try evalExpression(value, scope);
             const result = scope.result() orelse unreachable;
-            try stdlib.conversions.toString(&[_]Expression{result}, scope);
+            try stdlib.conversions.toString(
+                stdlib.libtype.CallMatch.init(&[_]Expression{result}, null, null),
+                scope,
+            );
             const str = scope.result() orelse unreachable;
             std.debug.assert(str == .string);
             try acc.append(str.string.value);
@@ -470,7 +474,10 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     scope.return_result = out;
                 },
                 .boolean => {
-                    try stdlib.conversions.toString(&[_]Expression{rightEval}, scope);
+                    try stdlib.conversions.toString(
+                        stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                        scope,
+                    );
                     const r = scope.result() orelse unreachable;
                     const out = try scope.allocator.create(Expression);
                     const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ l.value, r.string.value });
@@ -478,7 +485,10 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     scope.return_result = out;
                 },
                 .number => {
-                    try stdlib.conversions.toString(&[_]Expression{rightEval}, scope);
+                    try stdlib.conversions.toString(
+                        stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                        scope,
+                    );
                     const r = scope.result() orelse unreachable;
                     const out = try scope.allocator.create(Expression);
                     const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ l.value, r.string.value });
@@ -499,7 +509,10 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     }
                 },
                 .string => |str| {
-                    try stdlib.conversions.toString(&[_]Expression{leftEval}, scope);
+                    try stdlib.conversions.toString(
+                        stdlib.libtype.CallMatch.init(&[_]Expression{leftEval}, null, null),
+                        scope,
+                    );
                     const r = scope.result() orelse unreachable;
                     const out = try scope.allocator.create(Expression);
                     const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ r.string.value, str.value });
@@ -512,9 +525,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
-                try stdlib.conversions.toNumber(&[_]Expression{e}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    scope,
+                );
                 const l = scope.result() orelse unreachable;
-                try stdlib.conversions.toNumber(&[_]Expression{rightEval}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    scope,
+                );
                 const r = scope.result() orelse unreachable;
                 const res = l.number.add(r.number);
                 if (res == .float) {
@@ -560,9 +579,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
-                try stdlib.conversions.toNumber(&[_]Expression{e}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    scope,
+                );
                 const l = scope.result() orelse unreachable;
-                try stdlib.conversions.toNumber(&[_]Expression{rightEval}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    scope,
+                );
                 const r = scope.result() orelse unreachable;
                 const res = l.number.mul(r.number);
                 if (res == .float) {
@@ -589,9 +614,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 else => return Error.NotImplemented,
             },
             else => |e| {
-                try stdlib.conversions.toNumber(&[_]Expression{e}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    scope,
+                );
                 const l = scope.result() orelse unreachable;
-                try stdlib.conversions.toNumber(&[_]Expression{rightEval}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    scope,
+                );
                 const r = scope.result() orelse unreachable;
                 const res = l.number.sub(r.number);
                 if (res == .float) {
@@ -621,9 +652,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
-                try stdlib.conversions.toNumber(&[_]Expression{e}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    scope,
+                );
                 const l = scope.result() orelse unreachable;
-                try stdlib.conversions.toNumber(&[_]Expression{rightEval}, scope);
+                try stdlib.conversions.toNumber(
+                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    scope,
+                );
                 const r = scope.result() orelse unreachable;
                 const res = l.number.div(r.number);
                 if (res == .float) {
