@@ -52,9 +52,14 @@ pub const MatchError = error{
 };
 
 pub fn match_call_args(exprs: []const Expression, arity: Arity) MatchError!CallMatch {
-    _ = exprs;
-    _ = arity;
-    return MatchError.NotEnoughArguments;
+    // TODO: add support for optional arguments and variadic arguments
+    if (exprs.len > arity.unnamed_count) return MatchError.TooManyArguments;
+    if (exprs.len > arity.unnamed_count) return MatchError.NotEnoughArguments;
+    return .{
+        .unnamed_args = exprs[0..],
+        .optional_args = &[0]CallMatch.OptionalArg{},
+        .var_args = null,
+    };
 }
 
 const mappings = .{
