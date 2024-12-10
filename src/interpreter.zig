@@ -147,16 +147,7 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
 
     switch (fc.func.*) {
         .identifier => |id| {
-            if (std.mem.eql(u8, id.name, "print")) {
-                var has_printed = false;
-                for (tmpArgs) |*value| {
-                    if (has_printed) {
-                        scope.out.print(" ", .{}) catch return Error.IOWrite;
-                    } else has_printed = true;
-                    try printValue(value.*, scope);
-                }
-                scope.out.print("\n", .{}) catch return Error.IOWrite;
-            } else if (stdlib.builtins.get(id.name)) |fn_ctxt| {
+            if (stdlib.builtins.get(id.name)) |fn_ctxt| {
                 try evalStdlibCall(fn_ctxt, tmpArgs, scope);
             } else {
                 if (scope.lookupFunction(id)) |f| {
