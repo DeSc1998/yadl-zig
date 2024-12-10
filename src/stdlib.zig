@@ -22,6 +22,7 @@ pub const FunctionContext = struct {
 };
 
 const Arity = struct {
+    // NOTE: unnamed from the perspective of the call site
     unnamed_count: u32,
     optionals: [][]const u8 = &[0][]const u8{},
     has_variadics: bool = false,
