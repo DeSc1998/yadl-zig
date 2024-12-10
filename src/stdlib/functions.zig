@@ -592,7 +592,7 @@ pub fn group_by(args: libtype.CallMatch, scope: *Scope) Error!void {
                 const result = scope.result() orelse return Error.ValueNotFound;
                 var out_scope = Scope.empty(scope.allocator, writer);
                 // NOTE: praying that only simple values are printed
-                try interpreter.printValue(result, &out_scope);
+                try printValue(result, &out_scope);
                 const written: []const u8 = fixedStream.getWritten();
                 if (out_map.getPtr(written)) |value| {
                     try value.append(elem);
