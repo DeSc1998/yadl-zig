@@ -356,7 +356,7 @@ fn evalStructAccess(strct: *Expression, key: *Expression, scope: *Scope) Error!v
     }
 }
 
-fn evalExpression(value: *Expression, scope: *Scope) Error!void {
+pub fn evalExpression(value: *Expression, scope: *Scope) Error!void {
     switch (value.*) {
         .identifier => |id| {
             var v = try scope.lookup(id) orelse {

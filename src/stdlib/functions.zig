@@ -3,8 +3,10 @@ const std = @import("std");
 const expression = @import("../expression.zig");
 const statement = @import("../statement.zig");
 const interpreter = @import("../interpreter.zig");
+const Parser = @import("../Parser.zig");
 const libtype = @import("type.zig");
 const data = @import("data.zig");
+const conversions = @import("conversions.zig");
 const Scope = @import("../Scope.zig");
 const Expression = expression.Expression;
 const Statement = statement.Statement;
@@ -1165,8 +1167,131 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
 }
 
 pub fn print3(args: libtype.CallMatch, scope: *Scope) Error!void {
-    try interpreter.printValue(args.unnamed_args[0], scope);
+    try printValue(args.unnamed_args[0], scope);
     _ = scope.out.write("\n") catch return Error.IOWrite;
+}
+
+pub fn print(args: libtype.CallMatch, scope: *Scope) Error!void {
+    if (args.var_args) |vars| {
+        var has_printed = false;
+        for (vars) |*value| {
+            if (has_printed) {
+                scope.out.print(" ", .{}) catch return Error.IOWrite;
+            } else has_printed = true;
+            try printValue(value.*, scope);
+        }
+        scope.out.print("\n", .{}) catch return Error.IOWrite;
+    } else {
+        scope.out.print("\n", .{}) catch return Error.IOWrite;
+    }
+}
+
+fn printValue(value: Expression, scope: *Scope) Error!void {
+    switch (value) {
+        .identifier => |id| {
+            const tmp = try scope.lookup(id) orelse return Error.ValueNotFound;
+            try printValue(tmp.*, scope);
+        },
+        .number => |n| {
+            if (n == .float) {
+                scope.out.print("{d}", .{n.float}) catch return Error.IOWrite;
+            } else scope.out.print("{d}", .{n.integer}) catch return Error.IOWrite;
+        },
+        .boolean => |v| {
+            scope.out.print("{}", .{v.value}) catch return Error.IOWrite;
+        },
+        .string => |v| {
+            scope.out.print("{s}", .{v.value}) catch return Error.IOWrite;
+        },
+        .array => |v| {
+            scope.out.print("[", .{}) catch return Error.IOWrite;
+            var has_printed = false;
+            for (v.elements) |val| {
+                if (has_printed) {
+                    scope.out.print(", ", .{}) catch return Error.IOWrite;
+                } else has_printed = true;
+                try printValue(val, scope);
+            }
+            scope.out.print("]", .{}) catch return Error.IOWrite;
+        },
+        .dictionary => |v| {
+            _ = scope.out.write("{") catch return Error.IOWrite;
+            var has_printed = false;
+            for (v.entries) |val| {
+                if (has_printed) {
+                    _ = scope.out.write(", ") catch return Error.IOWrite;
+                } else has_printed = true;
+                try printValue(val.key.*, scope);
+                _ = scope.out.write(": ") catch return Error.IOWrite;
+                try printValue(val.value.*, scope);
+            }
+            _ = scope.out.write("}") catch return Error.IOWrite;
+        },
+        .formatted_string => |f| {
+            try evalFormattedString(f, scope);
+            const string = scope.result() orelse unreachable;
+            std.debug.assert(string == .string);
+            scope.out.print("{s}", .{string.string.value}) catch return Error.IOWrite;
+        },
+        .iterator => {
+            scope.out.print("<{s}>", .{@tagName(value)}) catch return Error.IOWrite;
+        },
+        else => |v| {
+            std.debug.print("TODO: printing of value: {s}\n", .{@tagName(v)});
+            return Error.NotImplemented;
+        },
+    }
+}
+
+fn checkCurlyParenBalance(string: expression.String) Error!void {
+    var depth: usize = 0;
+    var was_open_last = false;
+    for (string.value) |char| {
+        if (char == '{' and !was_open_last) {
+            depth += 1;
+            was_open_last = true;
+        }
+
+        if (char == '}' and depth > 0 and was_open_last) {
+            depth -= 1;
+            was_open_last = false;
+        } else if (char == '}' and depth == 0) {
+            return Error.MalformedFormattedString;
+        }
+    }
+    if (depth != 0) {
+        return Error.MalformedFormattedString;
+    }
+}
+
+fn evalFormattedString(string: expression.String, scope: *Scope) Error!void {
+    try checkCurlyParenBalance(string);
+    var splitter = std.mem.splitAny(u8, string.value, "{}");
+    var is_inner_expr = false;
+    var acc = std.ArrayList([]const u8).init(scope.allocator);
+    defer acc.deinit();
+    while (splitter.next()) |part| {
+        if (is_inner_expr) {
+            var parser = Parser.init(part, scope.allocator);
+            const value = parser.parseExpression(0) catch
+                return Error.MalformedFormattedString;
+
+            try interpreter.evalExpression(value, scope);
+            const result = scope.result() orelse unreachable;
+            try conversions.toString(
+                libtype.CallMatch.init(&[_]Expression{result}, null, null),
+                scope,
+            );
+            const str = scope.result() orelse unreachable;
+            std.debug.assert(str == .string);
+            try acc.append(str.string.value);
+        } else {
+            try acc.append(part);
+        }
+        is_inner_expr = !is_inner_expr;
+    }
+    const tmp = try std.mem.join(scope.allocator, "", acc.items);
+    scope.return_result = try expression.String.init(scope.allocator, tmp);
 }
 
 const DEFAULT_INDEX = 1;
