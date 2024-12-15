@@ -184,6 +184,35 @@ pub const Function = struct {
     args: []const Identifier,
     body: []const stmt.Statement,
 
+    pub const Arity = struct {
+        args: []const Identifier,
+        optional_args: []const Identifier = ([0]Identifier{})[0..],
+        var_args: ?Identifier = null,
+
+        pub fn init(args: []const Identifier) Arity {
+            return .{ .args = args };
+        }
+
+        pub fn initVarArgs(args: []const Identifier, var_args: Identifier) Arity {
+            return .{
+                .args = args,
+                .var_args = var_args,
+            };
+        }
+
+        pub fn initFull(
+            args: []const Identifier,
+            options: []const Identifier,
+            var_args: ?Identifier,
+        ) Arity {
+            return .{
+                .args = args,
+                .optional_args = options,
+                .var_args = var_args,
+            };
+        }
+    };
+
     pub fn init(
         alloc: std.mem.Allocator,
         args: []const Identifier,

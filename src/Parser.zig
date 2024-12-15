@@ -471,6 +471,32 @@ fn parseIdent(self: *Self) Error!expr.Identifier {
     return expr.identifier(id.chars);
 }
 
+fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
+    var current_identifier = self.expect(.Identifier, null) catch return Error.RepeatedParsingNoElements;
+    var normal_args = std.ArrayList(expr.Identifier).init(self.allocator);
+    while (self.expect(.ArgSep, null)) |_| {
+        try normal_args.append(.{ .name = current_identifier.chars });
+        current_identifier = try self.expect(.Identifier, null);
+    } else |err| {
+        if (err != Error.UnexpectedToken) return err;
+
+        const token = self.currentToken() orelse unreachable;
+        switch (token.kind) {
+            .VarArgsDots => {
+                _ = self.expect(.VarArgsDots, null) catch unreachable;
+                const var_args = expr.Identifier{ .name = current_identifier.chars };
+                return expr.Function.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
+            },
+            .Operator => {
+                try todo(void, "implementation of optional arguments in function definition");
+                unreachable;
+            },
+            else => return err,
+        }
+    }
+    unreachable;
+}
+
 fn parseFunction(self: *Self) Error!*expr.Expression {
     _ = try self.expect(.OpenParen, "(");
     const args = self.parseRepeated(expr.Identifier, Self.parseIdent) catch |err| b: {
