@@ -17,6 +17,7 @@ pub const TokenKind = enum {
     Operator,
     ArgSep,
     KeyValueSep,
+    VarArgsDots,
     OpenParen, // NOTE: refers to all of: { [ (
     CloseParen, // NOTE: refers to all of: } ] )
     LambdaArrow,
@@ -492,6 +493,13 @@ pub fn nextToken(self: *Self) Error!Token {
     if (char == ',') {
         self.skipOne() catch unreachable;
         return self.newToken(self.data[pos..self.current_position], .ArgSep);
+    } else if (char == '.') {
+        if (!std.mem.eql(u8, "...", self.data[pos .. pos + 3])) return Error.UnexpectedCharacter;
+
+        self.skipOne() catch unreachable;
+        self.skipOne() catch unreachable;
+        self.skipOne() catch unreachable;
+        return self.newToken(self.data[pos..self.current_position], .VarArgsDots);
     } else if (isStringBegin(self.data[self.current_position..])) {
         return self.lexString();
     } else if (anyOf(char, "ft")) {

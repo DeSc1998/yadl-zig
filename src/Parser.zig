@@ -471,23 +471,47 @@ fn parseIdent(self: *Self) Error!expr.Identifier {
     return expr.identifier(id.chars);
 }
 
+fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
+    var current_identifier = self.expect(.Identifier, null) catch return expr.Function.Arity.init(([0]expr.Identifier{})[0..]);
+    var normal_args = std.ArrayList(expr.Identifier).init(self.allocator);
+    while (self.expect(.ArgSep, null)) |_| {
+        try normal_args.append(.{ .name = current_identifier.chars });
+        current_identifier = try self.expect(.Identifier, null);
+    } else |err| {
+        if (err != Error.UnexpectedToken) return err;
+
+        const token = self.currentToken() orelse unreachable;
+        switch (token.kind) {
+            .VarArgsDots => {
+                _ = self.expect(.VarArgsDots, null) catch unreachable;
+                const var_args = expr.Identifier{ .name = current_identifier.chars };
+                return expr.Function.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
+            },
+            .Operator => {
+                try todo(void, "implementation of optional arguments in function definition");
+                unreachable;
+            },
+            .CloseParen => {
+                try normal_args.append(.{ .name = current_identifier.chars });
+                return expr.Function.Arity.init(try normal_args.toOwnedSlice());
+            },
+            else => return err,
+        }
+    }
+    unreachable;
+}
+
 fn parseFunction(self: *Self) Error!*expr.Expression {
     _ = try self.expect(.OpenParen, "(");
-    const args = self.parseRepeated(expr.Identifier, Self.parseIdent) catch |err| b: {
-        if (err == Error.RepeatedParsingNoElements) {
-            break :b &[_]expr.Identifier{};
-        }
-        return err;
-    };
+    const arity = try self.parseFunctionArity();
     _ = try self.expect(.CloseParen, ")");
     _ = try self.expect(.LambdaArrow, null);
     const pos = self.lexer.current_position;
 
     if (self.parseCodeblock()) |body| {
-        return expr.Function.init(self.allocator, args, body);
+        return expr.Function.init(self.allocator, arity, body);
     } else |err| {
         if (err != Error.UnexpectedToken) {
-            self.allocator.free(args);
             return err;
         }
         self.reset(pos);
@@ -495,7 +519,7 @@ fn parseFunction(self: *Self) Error!*expr.Expression {
         const ret: stmt.Return = .{ .value = ex };
         var statemants = try self.allocator.alloc(stmt.Statement, 1);
         statemants[0] = .{ .@"return" = ret };
-        return expr.Function.init(self.allocator, args, statemants);
+        return expr.Function.init(self.allocator, arity, statemants);
     }
 }
 
@@ -879,7 +903,7 @@ test "function" {
     try std.testing.expectEqualStrings("aoeu", result_stmt.assignment.varName.name);
     try std.testing.expect(result_stmt.assignment.value.* == .function);
     const function = result_stmt.assignment.value.function;
-    try std.testing.expectEqual(1, function.args.len);
+    try std.testing.expectEqual(1, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
 
@@ -903,7 +927,7 @@ test "function - no args" {
     try std.testing.expect(result_stmt == .assignment);
     try std.testing.expect(result_stmt.assignment.value.* == .function);
     const function = result_stmt.assignment.value.function;
-    try std.testing.expectEqual(0, function.args.len);
+    try std.testing.expectEqual(0, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
 

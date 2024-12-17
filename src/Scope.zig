@@ -31,7 +31,13 @@ pub fn empty(alloc: std.mem.Allocator, out: std.io.AnyWriter) Scope {
     };
 }
 
-pub fn init(alloc: std.mem.Allocator, out: std.io.AnyWriter, parent: *Scope, vars: []const expr.Identifier, exprs: []Expression) !Scope {
+pub fn init(
+    alloc: std.mem.Allocator,
+    out: std.io.AnyWriter,
+    parent: *Scope,
+    vars: []const expr.Identifier,
+    exprs: []Expression,
+) !Scope {
     var tmp: Scope = .{
         .allocator = alloc,
         .out = out,
@@ -42,6 +48,31 @@ pub fn init(alloc: std.mem.Allocator, out: std.io.AnyWriter, parent: *Scope, var
     for (vars, exprs) |v, *e| {
         try tmp.locals.put(v.name, e);
     }
+    return tmp;
+}
+
+pub fn fromCallMatch(
+    alloc: std.mem.Allocator,
+    out: std.io.AnyWriter,
+    parent: *Scope,
+    func_arity: expr.Function.Arity,
+    call_match: stdlib.libtype.CallMatch,
+) !Scope {
+    var tmp: Scope = .{
+        .allocator = alloc,
+        .out = out,
+        .parent = parent,
+        .locals = Bindings.init(alloc),
+        .functions = Functions.init(alloc),
+    };
+    for (func_arity.args, call_match.unnamed_args) |v, *e| {
+        try tmp.locals.put(v.name, e);
+    }
+    if (func_arity.var_args) |vars_id| {
+        const tmp_vars = try expr.Array.init(alloc, call_match.var_args.?);
+        try tmp.locals.put(vars_id.name, tmp_vars);
+    }
+
     return tmp;
 }
 
@@ -113,9 +144,9 @@ fn lookupFunctionInParent(self: Scope, ident: expr.Identifier) ?expr.Function {
 pub fn update(self: *Scope, ident: expr.Identifier, value: *Expression) Error!void {
     if (value.* == .function) {
         if (self.functions.get(ident.name)) |_| {
-            const new_body = try self.captureExternals(value.function.args, value.function.body);
+            const new_body = try self.captureExternals(value.function.arity, value.function.body);
             const new_fn = .{
-                .args = value.function.args,
+                .arity = value.function.arity,
                 .body = new_body,
             };
             try self.functions.put(ident.name, new_fn);
@@ -127,12 +158,19 @@ pub fn update(self: *Scope, ident: expr.Identifier, value: *Expression) Error!vo
     }
 }
 
-pub fn captureExternals(scope: *Scope, fn_args: []const expr.Identifier, fn_body: []const Statement) Error![]Statement {
+pub fn captureExternals(scope: *Scope, fn_arity: expr.Function.Arity, fn_body: []const Statement) Error![]Statement {
     var bound = std.ArrayList([]const u8).init(scope.allocator);
     const new_body = try scope.allocator.alloc(Statement, fn_body.len);
-    for (fn_args) |arg| {
+    for (fn_arity.args) |arg| {
         try bound.append(arg.name);
     }
+    for (fn_arity.optional_args) |arg| {
+        try bound.append(arg.name);
+    }
+
+    if (fn_arity.var_args) |va|
+        try bound.append(va.name);
+
     try bound.append("print");
     const keys = stdlib.builtins.keys();
     for (keys) |key| {
@@ -206,7 +244,7 @@ fn captureFromValue(value: *const Expression, bound: *std.ArrayList([]const u8),
             }
             const out = try scope.allocator.create(Expression);
             out.* = .{ .function = .{
-                .args = f.args,
+                .arity = f.arity,
                 .body = new_body,
             } };
             break :b out;

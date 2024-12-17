@@ -21,14 +21,14 @@ pub const OptionalArg = struct {
 };
 
 pub const CallMatch = struct {
-    unnamed_args: []const expression.Expression,
-    optional_args: []const OptionalArg,
-    var_args: ?[]const expression.Expression,
+    unnamed_args: []expression.Expression,
+    optional_args: []OptionalArg,
+    var_args: ?[]expression.Expression,
 
     pub fn init(
-        unnamed_args: []const expression.Expression,
-        optionals: ?[]const OptionalArg,
-        var_args: ?[]const expression.Expression,
+        unnamed_args: []expression.Expression,
+        optionals: ?[]OptionalArg,
+        var_args: ?[]expression.Expression,
     ) CallMatch {
         return .{
             .unnamed_args = unnamed_args,

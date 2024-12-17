@@ -14,7 +14,8 @@ const Statement = statement.Statement;
 pub const Error = @import("type.zig").Error;
 
 fn exec_runtime_function(func: expression.Function, call_args: []Expression, scope: *Scope) Error!void {
-    var local_scope = try Scope.init(scope.allocator, scope.out, scope, func.args, call_args);
+    const match = @import("../stdlib.zig").match_runtime_call_args(call_args, func.arity) catch return Error.ArityMismatch;
+    var local_scope = try Scope.fromCallMatch(scope.allocator, scope.out, scope, func.arity, match);
     for (func.body) |st| {
         try interpreter.evalStatement(st, &local_scope);
     }
@@ -172,8 +173,8 @@ const FLATTEN_DATA_INDEX = 0;
 const FLATTEN_INTERMEDIATE_INDEX = 1;
 fn flatten_iter_has_elements(iter: Expression, scope: *Scope) bool {
     if (iter == .iterator) {
-        const ptr = &iter;
-        iter_has_next(libtype.CallMatch.init(ptr[0..1], null, null), scope) catch return false;
+        var tmp_array = [1]Expression{iter};
+        iter_has_next(libtype.CallMatch.init(tmp_array[0..1], null, null), scope) catch return false;
         const tmp = scope.result() orelse unreachable;
         return tmp == .boolean and tmp.boolean.value;
     }
@@ -324,7 +325,8 @@ pub fn flatmap(args: libtype.CallMatch, scope: *Scope) Error!void {
         .array, .iterator => {
             try map(args, scope);
             const map_result = scope.result() orelse unreachable;
-            try flatten(libtype.CallMatch.init(&[_]Expression{map_result}, null, null), scope);
+            var tmp_array = [1]Expression{map_result};
+            try flatten(libtype.CallMatch.init(tmp_array[0..1], null, null), scope);
         },
         else => return Error.NotImplemented,
     }
@@ -334,8 +336,8 @@ pub fn reduce(args: libtype.CallMatch, scope: *Scope) Error!void {
     const elements = args.unnamed_args[0];
     const callable = args.unnamed_args[1];
     std.debug.assert(callable == .function);
-    if (callable.function.args.len != 2) {
-        std.debug.print("ERROR: the provided function has {} arguments\n", .{callable.function.args.len});
+    if (callable.function.arity.args.len != 2) {
+        std.debug.print("ERROR: the provided function has {} arguments\n", .{callable.function.arity.args.len});
         std.debug.print("   needed are {}\n", .{2});
         return Error.InvalidExpressoinType;
     }
@@ -482,10 +484,11 @@ fn equal_to_key(groupper: *Expression, key: *Expression, scope: *Scope) !*Expres
     );
     const args = try scope.allocator.alloc(expression.Identifier, 1);
     args[0] = .{ .name = "x" };
+    const arity = expression.Function.Arity{ .args = args };
     const sts = try scope.allocator.alloc(Statement, 2);
     sts[0] = .{ .assignment = .{ .varName = tmp.identifier, .value = fn_call } };
     sts[1] = .{ .@"return" = .{ .value = bin } };
-    return expression.Function.init(scope.allocator, args, sts);
+    return expression.Function.init(scope.allocator, arity, sts);
 }
 
 fn group_by_peek(data_expr: *expression.Expression, scope: *Scope) Error!void {
@@ -691,8 +694,8 @@ fn check(context: Context, args: libtype.CallMatch, scope: *Scope) Error!void {
     const callable = args.unnamed_args[1];
 
     std.debug.assert(callable == .function);
-    if (callable.function.args.len != 1) {
-        std.debug.print("ERROR: the provided function has {} arguments\n", .{callable.function.args.len});
+    if (callable.function.arity.args.len != 1) {
+        std.debug.print("ERROR: the provided function has {} arguments\n", .{callable.function.arity.args.len});
         std.debug.print("   needed are {}\n", .{1});
         std.process.exit(1);
     }
@@ -1045,7 +1048,7 @@ pub fn sort(args: libtype.CallMatch, scope: *Scope) Error!void {
     const elements = args.unnamed_args[0];
     const callable = args.unnamed_args[1];
     std.debug.assert(callable == .function);
-    std.debug.assert(callable.function.args.len == 2);
+    std.debug.assert(callable.function.arity.args.len == 2);
 
     switch (elements) {
         .array => |a| {
@@ -1139,7 +1142,7 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
             scope.return_result = try default_value.clone(scope.allocator);
         },
         .iterator => {
-            const elems = &elements;
+            var elems = [1]Expression{elements};
             try iter_has_next(libtype.CallMatch.init(elems[0..1], null, null), scope);
             var condition = scope.result() orelse unreachable;
             var call_args = try scope.allocator.alloc(Expression, 1);
@@ -1278,8 +1281,9 @@ fn evalFormattedString(string: expression.String, scope: *Scope) Error!void {
 
             try interpreter.evalExpression(value, scope);
             const result = scope.result() orelse unreachable;
+            var tmp_array = [1]Expression{result};
             try conversions.toString(
-                libtype.CallMatch.init(&[_]Expression{result}, null, null),
+                libtype.CallMatch.init(tmp_array[0..1], null, null),
                 scope,
             );
             const str = scope.result() orelse unreachable;
@@ -1410,11 +1414,8 @@ pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
             const tmp = try scope.allocator.alloc(Expression, 1);
             defer scope.allocator.free(tmp);
             tmp[0] = iter.iterator.data.*;
-            var local = try Scope.init(scope.allocator, scope.out, scope, f.args, tmp);
-            for (f.body) |st| {
-                try interpreter.evalStatement(st, &local);
-            }
-            if (local.result_ref()) |res| {
+            try exec_runtime_function(f, tmp, scope);
+            if (scope.result_ref()) |res| {
                 scope.return_result = res;
             } else {
                 return Error.ValueNotFound;
@@ -1458,11 +1459,8 @@ pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
             const tmp = try scope.allocator.alloc(Expression, 1);
             defer scope.allocator.free(tmp);
             tmp[0] = iter.iterator.data.*;
-            var local = try Scope.init(scope.allocator, scope.out, scope, f.args, tmp);
-            for (f.body) |st| {
-                try interpreter.evalStatement(st, &local);
-            }
-            if (local.result_ref()) |res| {
+            try exec_runtime_function(f, tmp, scope);
+            if (scope.result_ref()) |res| {
                 scope.return_result = res;
             } else {
                 return Error.ValueNotFound;
