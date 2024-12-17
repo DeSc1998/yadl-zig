@@ -123,7 +123,7 @@ fn modify(strct: *Expression, value: *Expression, scope: *Scope) Error!void {
     }
 }
 
-fn evalStdlibCall(context: stdlib.FunctionContext, evaled_args: []const Expression, scope: *Scope) Error!void {
+fn evalStdlibCall(context: stdlib.FunctionContext, evaled_args: []Expression, scope: *Scope) Error!void {
     if (stdlib.match_call_args(evaled_args, context.arity)) |match| {
         context.function(match, scope) catch unreachable; // TODO: handle error once error values are added
     } else |err| {
@@ -151,7 +151,8 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
                 try evalStdlibCall(fn_ctxt, tmpArgs, scope);
             } else {
                 if (scope.lookupFunction(id)) |f| {
-                    var localScope = try Scope.init(scope.allocator, scope.out, scope, f.args, tmpArgs);
+                    const match = stdlib.match_runtime_call_args(tmpArgs, f.arity) catch return Error.ArityMismatch;
+                    var localScope = try Scope.fromCallMatch(scope.allocator, scope.out, scope, f.arity, match);
                     for (f.body) |st| {
                         try evalStatement(st, &localScope);
                     }
@@ -179,7 +180,8 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
             try evalFunctionCall(&tmp2, scope);
         },
         .function => |f| {
-            var localScope = try Scope.init(scope.allocator, scope.out, scope, f.args, tmpArgs);
+            const match = stdlib.match_runtime_call_args(tmpArgs, f.arity) catch return Error.ArityMismatch;
+            var localScope = try Scope.fromCallMatch(scope.allocator, scope.out, scope, f.arity, match);
             for (f.body) |st| {
                 try evalStatement(st, &localScope);
             }
@@ -288,10 +290,11 @@ pub fn evalExpression(value: *Expression, scope: *Scope) Error!void {
             scope.return_result = try expr.Dictionary.init(scope.allocator, tmp);
         },
         .function => |f| {
-            const new_body = try scope.captureExternals(&[_]expr.Identifier{}, f.body);
+            const arity = expr.Function.Arity{ .args = ([0]expr.Identifier{})[0..] };
+            const new_body = try scope.captureExternals(arity, f.body);
             const out = try scope.allocator.create(Expression);
             out.* = .{ .function = .{
-                .args = f.args,
+                .arity = f.arity,
                 .body = new_body,
             } };
             scope.return_result = out;
@@ -357,8 +360,9 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     scope.return_result = out;
                 },
                 .boolean => {
+                    var tmp_array = [1]Expression{rightEval};
                     try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                         scope,
                     );
                     const r = scope.result() orelse unreachable;
@@ -368,8 +372,9 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     scope.return_result = out;
                 },
                 .number => {
+                    var tmp_array = [1]Expression{rightEval};
                     try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                         scope,
                     );
                     const r = scope.result() orelse unreachable;
@@ -392,8 +397,9 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     }
                 },
                 .string => |str| {
+                    var tmp_array = [1]Expression{leftEval};
                     try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(&[_]Expression{leftEval}, null, null),
+                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                         scope,
                     );
                     const r = scope.result() orelse unreachable;
@@ -408,13 +414,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
+                var tmp_array = [1]Expression{e};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const l = scope.result() orelse unreachable;
+                tmp_array = [1]Expression{rightEval};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const r = scope.result() orelse unreachable;
@@ -462,13 +470,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
+                var tmp_array = [1]Expression{e};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const l = scope.result() orelse unreachable;
+                tmp_array = [1]Expression{rightEval};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const r = scope.result() orelse unreachable;
@@ -497,13 +507,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 else => return Error.NotImplemented,
             },
             else => |e| {
+                var tmp_array = [1]Expression{e};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const l = scope.result() orelse unreachable;
+                tmp_array = [1]Expression{rightEval};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const r = scope.result() orelse unreachable;
@@ -535,13 +547,15 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                 },
             },
             else => |e| {
+                var tmp_array = [1]Expression{e};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{e}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const l = scope.result() orelse unreachable;
+                tmp_array = [1]Expression{rightEval};
                 try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(&[_]Expression{rightEval}, null, null),
+                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
                     scope,
                 );
                 const r = scope.result() orelse unreachable;

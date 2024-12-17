@@ -181,19 +181,20 @@ pub const FunctionCall = struct {
 };
 
 pub const Function = struct {
-    args: []const Identifier,
+    arity: Arity,
     body: []const stmt.Statement,
 
     pub const Arity = struct {
-        args: []const Identifier,
-        optional_args: []const Identifier = ([0]Identifier{})[0..],
+        // allocator: std.mem.Allocator,
+        args: []Identifier,
+        optional_args: []Identifier = ([0]Identifier{})[0..],
         var_args: ?Identifier = null,
 
-        pub fn init(args: []const Identifier) Arity {
+        pub fn init(args: []Identifier) Arity {
             return .{ .args = args };
         }
 
-        pub fn initVarArgs(args: []const Identifier, var_args: Identifier) Arity {
+        pub fn initVarArgs(args: []Identifier, var_args: Identifier) Arity {
             return .{
                 .args = args,
                 .var_args = var_args,
@@ -201,8 +202,8 @@ pub const Function = struct {
         }
 
         pub fn initFull(
-            args: []const Identifier,
-            options: []const Identifier,
+            args: []Identifier,
+            options: []Identifier,
             var_args: ?Identifier,
         ) Arity {
             return .{
@@ -215,12 +216,12 @@ pub const Function = struct {
 
     pub fn init(
         alloc: std.mem.Allocator,
-        args: []const Identifier,
+        arity: Arity,
         body: []const stmt.Statement,
     ) !*Expression {
         const out = try alloc.create(Expression);
         out.* = .{ .function = Function{
-            .args = args,
+            .arity = arity,
             .body = body,
         } };
         return out;
@@ -417,16 +418,20 @@ pub const Expression = union(enum) {
             },
             .function => |f| b: {
                 const tmp = try alloc.create(Expression);
-                const args = try alloc.alloc(Identifier, f.args.len);
+                const args = try alloc.alloc(Identifier, f.arity.args.len);
+                const optionals = try alloc.alloc(Identifier, f.arity.optional_args.len);
                 const body = try alloc.alloc(@TypeOf(f.body[0]), f.body.len);
-                for (f.args, args) |old, *new| {
+                for (f.arity.args, args) |old, *new| {
+                    new.* = .{ .name = old.name };
+                }
+                for (f.arity.optional_args, optionals) |old, *new| {
                     new.* = .{ .name = old.name };
                 }
                 for (f.body, body) |old, *new| {
                     new.* = old;
                 }
                 tmp.* = .{ .function = .{
-                    .args = args,
+                    .arity = Function.Arity.initFull(args, optionals, f.arity.var_args),
                     .body = body,
                 } };
                 break :b tmp;
@@ -561,7 +566,8 @@ pub fn free_local(allocator: std.mem.Allocator, expr: Expression) void {
                 stmt.free(allocator, st);
             }
             allocator.free(f.body);
-            allocator.free(f.args);
+            allocator.free(f.arity.args);
+            allocator.free(f.arity.optional_args);
         },
         .array => |a| {
             allocator.free(a.elements);
