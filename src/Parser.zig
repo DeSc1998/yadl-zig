@@ -903,7 +903,7 @@ test "function" {
     try std.testing.expectEqualStrings("aoeu", result_stmt.assignment.varName.name);
     try std.testing.expect(result_stmt.assignment.value.* == .function);
     const function = result_stmt.assignment.value.function;
-    try std.testing.expectEqual(1, function.args.len);
+    try std.testing.expectEqual(1, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
 
@@ -927,7 +927,7 @@ test "function - no args" {
     try std.testing.expect(result_stmt == .assignment);
     try std.testing.expect(result_stmt.assignment.value.* == .function);
     const function = result_stmt.assignment.value.function;
-    try std.testing.expectEqual(0, function.args.len);
+    try std.testing.expectEqual(0, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
 
