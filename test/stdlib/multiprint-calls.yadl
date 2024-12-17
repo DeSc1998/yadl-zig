@@ -1,10 +1,10 @@
 // RUN: DEFAULT
 x = [1,2,3,4]
-print3(x)
+print(x)
 // CHECK-OUT: [1, 2, 3, 4]
-print3(x)
+print(x)
 // CHECK-OUT: [1, 2, 3, 4]
-print3(x)
+print(x)
 // CHECK-OUT: [1, 2, 3, 4]
-print3(x)
+print(x)
 // CHECK-OUT: [1, 2, 3, 4]

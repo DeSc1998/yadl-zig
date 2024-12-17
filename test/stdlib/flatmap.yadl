@@ -9,9 +9,9 @@ mapper = (x) => {
     }
 }
 
-print3(x)
+print(x)
 // CHECK-OUT: [1, 2, 3, 4, 5]
 result = flatmap(x, mapper)
-print3(result)
+print(result)
 
 // CHECK-OUT: [3, 1, 2, 3, 1, 2, 3]

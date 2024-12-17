@@ -1169,11 +1169,6 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
-pub fn print3(args: libtype.CallMatch, scope: *Scope) Error!void {
-    try printValue(args.unnamed_args[0], scope);
-    _ = scope.out.write("\n") catch return Error.IOWrite;
-}
-
 pub fn print(args: libtype.CallMatch, scope: *Scope) Error!void {
     if (args.var_args) |vars| {
         var has_printed = false;

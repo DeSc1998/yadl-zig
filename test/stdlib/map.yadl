@@ -10,6 +10,6 @@ square_if_even = (n) => {
 }
 
 result = map(x, square_if_even)
-print3(result)
+print(result)
 
 // CHECK-OUT: [1, 4, 3, 16, 5]

@@ -4,10 +4,10 @@ odd = (n) => n % 2 == 0
 
 d = load("test-data/complex.json", "json")
 
-print3(d["grades"])
+print(d["grades"])
 
 result = filter(d["grades"], odd)
-print3(result)
+print(result)
 
 // CHECK-OUT: [85, 90, 78, 92]
 // CHECK-OUT: [90, 78, 92]

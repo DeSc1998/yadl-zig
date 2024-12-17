@@ -82,8 +82,6 @@ const mappings = .{
     .{ "peek", .{ .function = &functions.iter_peek, .arity = .{ .unnamed_count = 1 } } },
     .{ "has_next", .{ .function = &functions.iter_has_next, .arity = .{ .unnamed_count = 1 } } },
 
-    // TODO: We may want to remove this one
-    .{ "print3", .{ .function = &functions.print3, .arity = .{ .unnamed_count = 1 } } },
     .{ "print", .{ .function = &functions.print, .arity = .{ .unnamed_count = 0, .has_variadics = true } } },
 };
 pub const builtins = std.static_string_map.StaticStringMap(FunctionContext).initComptime(mappings);
