@@ -1,0 +1,18 @@
+// RUN: DEFAULT
+
+f = (xs...) => {
+    index = 0
+    sum = 0
+    while (index < len(xs)) {
+        sum = sum + xs[index]
+        index = index + 1
+    }
+    return sum
+}
+
+print(f())
+// CHECK-OUT: 0
+print(f(1, 2, 3, 4))
+// CHECK-OUT: 10
+print(f(15, 5, 24, 25))
+// CHECK-OUT: 69
