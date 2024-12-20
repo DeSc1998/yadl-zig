@@ -330,3 +330,47 @@ test "iterator" {
         stream.reset();
     }
 }
+
+const scoping_test_dir = test_dir ++ "scoping/";
+const scoping_files = [_][]const u8{
+    "same-var-name-complex1.yadl",
+    "same-var-name-complex2.yadl",
+    "same-var-name-simple1.yadl",
+    "same-var-name-simple2.yadl",
+    "scoping_complex.yadl",
+    "scoping_simple.yadl",
+};
+const scoping_tests = b: {
+    var tmp: [scoping_files.len][]const u8 = undefined;
+    for (&tmp, scoping_files) |*out, file| {
+        out.* = scoping_test_dir ++ file;
+    }
+    break :b tmp;
+};
+
+test "scoping" {
+    const alloc = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
+    var output_buffer: [1024 * 50]u8 = undefined;
+    var stream = std.io.fixedBufferStream(output_buffer[0..]);
+    var out = stream.writer();
+
+    for (scoping_tests) |file| {
+        const content = try readFile(std.testing.allocator, file);
+        defer std.testing.allocator.free(content);
+
+        var parser = Parser.init(content, allocator);
+        const stmts = try parser.parse();
+        var scope = Scope.empty(allocator, out.any());
+        for (stmts) |st| {
+            try interpreter.evalStatement(st, &scope);
+        }
+        const expected = try Config.init(std.testing.allocator, content);
+        defer expected.deinit();
+        try validateOutput(expected, stream.getWritten());
+        stream.reset();
+    }
+}
