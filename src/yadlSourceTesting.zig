@@ -61,6 +61,31 @@ fn readFile(alloc: std.mem.Allocator, filepath: []const u8) ![]const u8 {
     return contents;
 }
 
+fn testRun(alloc: std.mem.Allocator, test_file: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
+    var output_buffer: [1024 * 50]u8 = undefined;
+    var stream = std.io.fixedBufferStream(output_buffer[0..]);
+    var out = stream.writer();
+
+    std.debug.print("INFO: running test file: {s}\n", .{test_file});
+
+    const content = try readFile(alloc, test_file);
+    defer alloc.free(content);
+
+    var parser = Parser.init(content, allocator);
+    const stmts = try parser.parse();
+    var scope = Scope.empty(allocator, out.any());
+    for (stmts) |st| {
+        try interpreter.evalStatement(st, &scope);
+    }
+    const expected = try Config.init(std.testing.allocator, content);
+    defer expected.deinit();
+    try validateOutput(expected, stream.getWritten());
+}
+
 const array_test_dir = test_dir ++ "array/";
 const array_files = [_][]const u8{
     "array_access.yadl",
@@ -78,29 +103,8 @@ const array_tests = b: {
 };
 
 test "array" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (array_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -118,29 +122,8 @@ const control_flow_tests = b: {
 };
 
 test "control flow" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (control_flow_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -161,29 +144,8 @@ const dictionary_tests = b: {
 };
 
 test "dictionay" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (dictionary_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -208,29 +170,8 @@ const expressions_tests = b: {
 };
 
 test "expressions" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (expressions_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -254,29 +195,8 @@ const functions_tests = b: {
 };
 
 test "functions" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (functions_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -305,29 +225,8 @@ const iterator_tests = b: {
 };
 
 test "iterator" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (iterator_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
-
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+        try testRun(std.testing.allocator, file);
     }
 }
 
@@ -349,28 +248,60 @@ const scoping_tests = b: {
 };
 
 test "scoping" {
-    const alloc = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
     for (scoping_tests) |file| {
-        const content = try readFile(std.testing.allocator, file);
-        defer std.testing.allocator.free(content);
+        try testRun(std.testing.allocator, file);
+    }
+}
 
-        var parser = Parser.init(content, allocator);
-        const stmts = try parser.parse();
-        var scope = Scope.empty(allocator, out.any());
-        for (stmts) |st| {
-            try interpreter.evalStatement(st, &scope);
-        }
-        const expected = try Config.init(std.testing.allocator, content);
-        defer expected.deinit();
-        try validateOutput(expected, stream.getWritten());
-        stream.reset();
+const stdlib_test_dir = test_dir ++ "stdlib/";
+const stdlib_files = [_][]const u8{
+    "check_builtins.yadl",
+    "count.yadl",
+    "do.yadl",
+    "filter.yadl",
+    "firstAndLast.yadl",
+    "flatmap.yadl",
+    "flatten.yadl",
+    "groupBy.yadl",
+    "len.yadl",
+    "map.yadl",
+    "multiprint-calls.yadl",
+    "reduce.yadl",
+    "reduce_string.yadl",
+    "sort.yadl",
+    "zip.yadl",
+};
+const stdlib_tests = b: {
+    var tmp: [stdlib_files.len][]const u8 = undefined;
+    for (&tmp, stdlib_files) |*out, file| {
+        out.* = stdlib_test_dir ++ file;
+    }
+    break :b tmp;
+};
+
+test "stdlib" {
+    for (stdlib_tests) |file| {
+        try testRun(std.testing.allocator, file);
+    }
+}
+
+const strings_test_dir = test_dir ++ "strings/";
+const strings_files = [_][]const u8{
+    "concat.yadl",
+    "multiline.yadl",
+    "simple.yadl",
+    "simple_format.yadl",
+};
+const strings_tests = b: {
+    var tmp: [strings_files.len][]const u8 = undefined;
+    for (&tmp, strings_files) |*out, file| {
+        out.* = strings_test_dir ++ file;
+    }
+    break :b tmp;
+};
+
+test "strings" {
+    for (strings_tests) |file| {
+        try testRun(std.testing.allocator, file);
     }
 }
