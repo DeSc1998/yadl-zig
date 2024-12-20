@@ -305,3 +305,26 @@ test "strings" {
         try testRun(std.testing.allocator, file);
     }
 }
+
+const type_conversions_test_dir = test_dir ++ "type_conversions/";
+const type_conversions_files = [_][]const u8{
+    "bool_to_num.yadl",
+    "bool_to_str.yadl",
+    "conversion_calls.yadl",
+    "dict_to_str.yadl",
+    "num_to_str.yadl",
+    "string_conversions.yadl",
+};
+const type_conversions_tests = b: {
+    var tmp: [type_conversions_files.len][]const u8 = undefined;
+    for (&tmp, type_conversions_files) |*out, file| {
+        out.* = type_conversions_test_dir ++ file;
+    }
+    break :b tmp;
+};
+
+test "type_conversions" {
+    for (type_conversions_tests) |file| {
+        try testRun(std.testing.allocator, file);
+    }
+}
