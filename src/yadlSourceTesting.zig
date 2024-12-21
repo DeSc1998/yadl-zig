@@ -86,6 +86,88 @@ fn testRun(alloc: std.mem.Allocator, test_file: []const u8) !void {
     try validateOutput(expected, stream.getWritten());
 }
 
+fn testFailingParse(alloc: std.mem.Allocator, test_file: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
+    std.debug.print("INFO: running test file: {s}\n", .{test_file});
+
+    const content = try readFile(alloc, test_file);
+    defer alloc.free(content);
+
+    var parser = Parser.init(content, allocator);
+    _ = try parser.parse();
+}
+
+fn testFailingRun(alloc: std.mem.Allocator, test_file: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
+    var output_buffer: [1024 * 50]u8 = undefined;
+    var stream = std.io.fixedBufferStream(output_buffer[0..]);
+    var out = stream.writer();
+
+    std.debug.print("INFO: running test file: {s}\n", .{test_file});
+
+    const content = try readFile(alloc, test_file);
+    defer alloc.free(content);
+
+    var parser = Parser.init(content, allocator);
+    const stmts = try parser.parse();
+    var scope = Scope.empty(allocator, out.any());
+    for (stmts) |st| {
+        try interpreter.evalStatement(st, &scope);
+    }
+    unreachable;
+}
+
+const failing_test_dir = test_dir ++ "failing/";
+const failing_files = [_][]const u8{
+    "argument_missmatch.yadl",
+    "missing_condition_if.yadl",
+    "missing_paren.yadl",
+    "missing_paren_function.yadl",
+    "missing_paren_if.yadl",
+    "missing_paren_if_elif.yadl",
+    "missing_paren_if_elif_else.yadl",
+    "missing_paren_if_else.yadl",
+    "name_error.yadl",
+};
+const Error = interpreter.Error || Parser.Error;
+const expected_failures = [_]Error{
+    interpreter.Error.ArityMismatch,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    Parser.Error.UnexpectedToken,
+    interpreter.Error.ValueNotFound,
+};
+const failing_tests = b: {
+    var tmp: [failing_files.len][]const u8 = undefined;
+    for (&tmp, failing_files) |*out, file| {
+        out.* = failing_test_dir ++ file;
+    }
+    break :b tmp;
+};
+test "failing" {
+    for (failing_tests, expected_failures) |file, fail| {
+        testRun(std.testing.allocator, file) catch |err| {
+            if (err != fail) return err;
+            continue;
+        };
+        std.debug.print(
+            "ERROR: test case '{s}' succeeded but failure was expected\n",
+            .{file},
+        );
+        unreachable;
+    }
+}
+
 const array_test_dir = test_dir ++ "array/";
 const array_files = [_][]const u8{
     "array_access.yadl",
