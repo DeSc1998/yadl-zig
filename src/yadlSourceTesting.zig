@@ -328,3 +328,25 @@ test "type_conversions" {
         try testRun(std.testing.allocator, file);
     }
 }
+
+const data_loading_test_dir = test_dir ++ "data_loading/";
+const data_loading_files = [_][]const u8{
+    "csv-with-header.yadl",
+    "csv-without-header.yadl",
+    "lines_loading.yadl",
+    "load_and_filter.yadl",
+    "top-level-array.yadl",
+};
+const data_loading_tests = b: {
+    var tmp: [data_loading_files.len][]const u8 = undefined;
+    for (&tmp, data_loading_files) |*out, file| {
+        out.* = data_loading_test_dir ++ file;
+    }
+    break :b tmp;
+};
+
+test "data_loading" {
+    for (data_loading_tests) |file| {
+        try testRun(std.testing.allocator, file);
+    }
+}
