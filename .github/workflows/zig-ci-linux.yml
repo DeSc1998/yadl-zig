@@ -14,6 +14,7 @@ jobs:
   build-linux:
     name: Build on Linux
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     env:
       YADL_BIN: zig-out/bin/yadl-linux
     steps:
