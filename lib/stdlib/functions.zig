@@ -1,9 +1,9 @@
 const std = @import("std");
 
+const Parser = @import("../Parser.zig");
 const expression = @import("../expression.zig");
 const statement = @import("../statement.zig");
 const interpreter = @import("../interpreter.zig");
-const Parser = @import("../Parser.zig");
 const libtype = @import("type.zig");
 const data = @import("data.zig");
 const conversions = @import("conversions.zig");

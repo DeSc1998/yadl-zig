@@ -1,10 +1,11 @@
 const std = @import("std");
-const Parser = @import("Parser.zig");
-const stmt = @import("statement.zig");
-const interpreter = @import("interpreter.zig");
-const stdlib = @import("stdlib.zig");
+const yadl = @import("yadl");
 
-const Scope = @import("Scope.zig");
+const Parser = yadl.Parser;
+const stmt = yadl.statement;
+const interpreter = yadl.interpreter;
+
+const Scope = yadl.Scope;
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
@@ -35,12 +36,7 @@ pub fn main() !void {
 
         var parser = Parser.init(input, allocator);
 
-        const stmts = parser.parse() catch |err| {
-            if (err == Parser.Error.EndOfFile) {
-                try stdout.print("ERROR: unexpected end of file\n", .{});
-            }
-            return err;
-        };
+        const stmts = try parser.parse();
 
         var scope = Scope.empty(allocator, stdout.any());
         // std.debug.print("INFO: memory usage (byte): {}\n", .{arena.queryCapacity()});

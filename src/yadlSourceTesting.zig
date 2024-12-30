@@ -1,8 +1,10 @@
 const std = @import("std");
 
-const Parser = @import("Parser.zig");
-const interpreter = @import("interpreter.zig");
-const Scope = @import("Scope.zig");
+const yadl = @import("yadl");
+
+const Parser = yadl.Parser;
+const interpreter = yadl.interpreter;
+const Scope = yadl.Scope;
 
 const test_dir = "test/"; // TODO: hard coded file path
 
@@ -86,43 +88,6 @@ fn testRun(alloc: std.mem.Allocator, test_file: []const u8) !void {
     try validateOutput(expected, stream.getWritten());
 }
 
-fn testFailingParse(alloc: std.mem.Allocator, test_file: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    std.debug.print("INFO: running test file: {s}\n", .{test_file});
-
-    const content = try readFile(alloc, test_file);
-    defer alloc.free(content);
-
-    var parser = Parser.init(content, allocator);
-    _ = try parser.parse();
-}
-
-fn testFailingRun(alloc: std.mem.Allocator, test_file: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    const allocator = arena.allocator();
-    defer arena.deinit();
-
-    var output_buffer: [1024 * 50]u8 = undefined;
-    var stream = std.io.fixedBufferStream(output_buffer[0..]);
-    var out = stream.writer();
-
-    std.debug.print("INFO: running test file: {s}\n", .{test_file});
-
-    const content = try readFile(alloc, test_file);
-    defer alloc.free(content);
-
-    var parser = Parser.init(content, allocator);
-    const stmts = try parser.parse();
-    var scope = Scope.empty(allocator, out.any());
-    for (stmts) |st| {
-        try interpreter.evalStatement(st, &scope);
-    }
-    unreachable;
-}
-
 const failing_test_dir = test_dir ++ "failing/";
 const failing_files = [_][]const u8{
     "argument_missmatch.yadl",
@@ -139,12 +104,12 @@ const Error = interpreter.Error || Parser.Error;
 const expected_failures = [_]Error{
     interpreter.Error.ArityMismatch,
     Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
-    Parser.Error.UnexpectedToken,
+    Parser.Error.EndOfFile,
+    Parser.Error.EndOfFile,
+    Parser.Error.EndOfFile,
+    Parser.Error.EndOfFile,
+    Parser.Error.EndOfFile,
+    Parser.Error.EndOfFile,
     interpreter.Error.ValueNotFound,
 };
 const failing_tests = b: {
