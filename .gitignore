@@ -13,3 +13,4 @@ zig-out/bin
 test-scripts/zig/__pycache__
 test-scripts/scala/__pycache__
 test-scripts/__pycache__
+zig-out/lib

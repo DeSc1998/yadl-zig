@@ -1,7 +1,7 @@
 const std = @import("std");
+const Parser = @import("Parser.zig");
 const stmt = @import("statement.zig");
 const expr = @import("expression.zig");
-const Parser = @import("Parser.zig");
 
 const Scope = @import("Scope.zig");
 const stdlib = @import("stdlib.zig");

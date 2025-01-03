@@ -26,15 +26,19 @@ lexer: Lexer,
 allocator: std.mem.Allocator,
 last_expected: ?Kind = null,
 last_expected_chars: ?[]const u8 = null,
+stderr: std.io.AnyWriter = std.io.getStdErr().writer().any(),
 
-var parser_diagnostic: bool = true;
+var parser_diagnostic: bool = false;
 
 const Kind = Lexer.TokenKind;
 const Token = Lexer.Token;
 const Self = @This();
 
+fn print(self: Self, comptime fmt: []const u8, args: anytype) void {
+    self.stderr.print(fmt, args) catch unreachable;
+}
+
 pub fn init(input: []const u8, allocator: std.mem.Allocator) Self {
-    Self.parser_diagnostic = std.process.hasEnvVar(allocator, "DIAG") catch false;
     return Self{
         .lexer = Lexer.init(input),
         .allocator = allocator,
@@ -69,11 +73,6 @@ pub fn printLexerContext(self: Self, out: std.io.AnyWriter) !void {
     try self.lexer.printContext(out, t);
 }
 
-fn todo(comptime T: type, msg: []const u8) Error!T {
-    std.debug.print("TODO: {s}\n", .{msg});
-    return Error.NotImplemented;
-}
-
 fn putNextToken(self: *Self) Error!void {
     const t = self.lexer.nextToken() catch |err| {
         handleAndExit(self, err);
@@ -81,18 +80,18 @@ fn putNextToken(self: *Self) Error!void {
     };
 
     if (Self.parser_diagnostic) {
-        std.debug.print("-----------------------------\n", .{});
-        std.debug.print(
+        self.print("-----------------------------\n", .{});
+        self.print(
             "INFO: ring buffer pos: r {}, w {}\n",
             .{ self.tokens.read_index, self.tokens.write_index },
         );
-        std.debug.print(" kind: {}\n", .{t.kind});
-        std.debug.print(" writing element...\n", .{});
+        self.print(" kind: {}\n", .{t.kind});
+        self.print(" writing element...\n", .{});
     }
     self.tokens.write(t) catch return Error.UnknownError;
 
     if (Self.parser_diagnostic) {
-        std.debug.print(
+        self.print(
             "INFO: ring buffer pos: r {}, w {}\n",
             .{ self.tokens.read_index, self.tokens.write_index },
         );
@@ -106,10 +105,10 @@ fn expect(self: *Self, kind: Kind, expected_chars: ?[]const u8) Error!Token {
 
     if (self.tokens.peek()) |token| {
         if (parser_diagnostic) {
-            std.debug.print("-----------------------------\n", .{});
-            std.debug.print("DEBUG: current ring buffer read: {}\n", .{self.tokens.read_index});
-            std.debug.print("DEBUG: kinds are (act, exp): \n    {}\n    {}\n", .{ token.kind, kind });
-            std.debug.print("DEBUG: current chars are: {s}\n", .{token.chars});
+            self.print("-----------------------------\n", .{});
+            self.print("DEBUG: current ring buffer read: {}\n", .{self.tokens.read_index});
+            self.print("DEBUG: kinds are (act, exp): \n    {}\n    {}\n", .{ token.kind, kind });
+            self.print("DEBUG: current chars are: {s}\n", .{token.chars});
 
             const stdout = std.io.getStdErr().writer();
             self.lexer.printContext(stdout.any(), token) catch return Error.UnknownError;
@@ -117,7 +116,7 @@ fn expect(self: *Self, kind: Kind, expected_chars: ?[]const u8) Error!Token {
 
         if (expected_chars) |chars| {
             if (parser_diagnostic) {
-                std.debug.print("DEBUG: expected chars: {s}\n", .{chars});
+                self.print("DEBUG: expected chars: {s}\n", .{chars});
             }
 
             if (token.kind == kind and std.mem.eql(u8, chars, token.chars)) {
@@ -145,9 +144,8 @@ fn handleAndExit(self: *Self, err: Error) void {
     if (err == Lexer.Error.EndOfFile) {
         return;
     } else {
-        const stderr = std.io.getStdErr().writer();
-        stderr.print("ERROR: failed to read next token: {}\n", .{err}) catch @panic("error during write to stderr");
-        self.printLexerContext(stderr.any()) catch @panic("error during write to stderr");
+        self.print("ERROR: failed to read next token: {}\n", .{err});
+        self.printLexerContext(self.stderr) catch @panic("error during write to stderr");
         std.process.exit(1);
     }
 }
@@ -488,8 +486,8 @@ fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
                 return expr.Function.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
             },
             .Operator => {
-                try todo(void, "implementation of optional arguments in function definition");
-                unreachable;
+                self.print("TODO: implementation of optional arguments in function definition", .{});
+                return Error.NotImplemented;
             },
             .CloseParen => {
                 try normal_args.append(.{ .name = current_identifier.chars });
@@ -592,7 +590,7 @@ fn parseCodeblock(self: *Self) Error![]stmt.Statement {
     _ = try self.expect(.OpenParen, "{");
     _ = try self.expect(.Newline, null);
     if (Self.parser_diagnostic) {
-        std.debug.print("DEBUG: read initial newline in code block\n", .{});
+        self.print("DEBUG: read initial newline in code block\n", .{});
     }
     const code = try self.parseStatements(.code_block_statement);
     _ = try self.expect(.CloseParen, "}");
@@ -611,7 +609,7 @@ fn parseBranch(self: *Self) Error!stmt.Branch {
 
 fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
     if (Self.parser_diagnostic) {
-        std.debug.print("INFO: parsing of if-statement\n", .{});
+        self.print("INFO: parsing of if-statement\n", .{});
     }
 
     if (kind == .initial_branch) {
@@ -622,8 +620,8 @@ fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
         if (err == Error.EndOfFile) {
             self.last_expected = .CloseParen;
             self.last_expected_chars = "}";
-            return Error.UnexpectedToken;
-        } else return err;
+        }
+        return err;
     };
     errdefer expr.free(self.allocator, branch.condition);
     errdefer self.allocator.free(branch.body);
@@ -700,7 +698,7 @@ fn parseRepeated(self: *Self, comptime T: type, f: fn (*Self) Error!T) Error![]T
         if (err == Error.UnexpectedToken or err == Error.EndOfFile)
             return elements.toOwnedSlice();
 
-        std.debug.print("ERROR: failure during repeated parsing: {}\n", .{err});
+        self.print("ERROR: failure during repeated parsing: {}\n", .{err});
         return err;
     }
     return elements.toOwnedSlice();
@@ -745,8 +743,8 @@ fn parseFunctionCall(self: *Self) Error!stmt.Statement {
 fn parseAssignment(self: *Self) Error!stmt.Statement {
     const id = self.expect(.Identifier, null) catch unreachable;
     _ = try self.expect(.Operator, "=");
-    const expression = try self.parseExpression(0);
-    return stmt.assignment(id.chars, expression);
+    const value = try self.parseExpression(0);
+    return stmt.assignment(id.chars, value);
 }
 
 fn parseStructAssignment(self: *Self) Error!stmt.Statement {
@@ -765,7 +763,7 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
     self.last_expected_chars = null;
     if (self.currentToken()) |token| {
         if (Self.parser_diagnostic) {
-            std.debug.print("DEBUG: current token kind at statement parse: {}\n", .{token.kind});
+            self.print("DEBUG: current token kind at statement parse: {}\n", .{token.kind});
         }
 
         const st = try switch (token.kind) {
@@ -784,11 +782,14 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
                 self.parseStructAssignment()
             else
                 self.parseAssignment()) else Error.UnexpectedToken,
-            .OpenParen => todo(stmt.Statement, "parse statement => case open paren"),
+            .OpenParen => {
+                self.print("TODO: parse statement => case open paren", .{});
+                return Error.NotImplemented;
+            },
             .Newline => {
                 _ = self.expect(.Newline, null) catch unreachable;
                 if (Self.parser_diagnostic) {
-                    std.debug.print("DEBUG: read newline as statement\n", .{});
+                    self.print("DEBUG: read newline as statement\n", .{});
                 }
                 return self.parseStatement();
             },
@@ -799,13 +800,13 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
                 return err;
 
             if (Self.parser_diagnostic) {
-                std.debug.print("DEBUG: failed to read newline: end of file\n", .{});
+                self.print("DEBUG: failed to read newline: end of file\n", .{});
             }
 
             return st;
         };
         if (Self.parser_diagnostic) {
-            std.debug.print("DEBUG: read newline after statement\n", .{});
+            self.print("DEBUG: read newline after statement\n", .{});
         }
         return st;
     } else return Error.EndOfFile;
@@ -815,39 +816,45 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
 
 fn parseStatements(self: *Self, statement_kind: StatementKind) Error![]stmt.Statement {
     var stmts = std.ArrayList(stmt.Statement).init(self.allocator);
-    while (self.parseStatement()) |statement| {
-        try stmts.append(statement);
+    if (statement_kind != .code_block_statement and Self.parser_diagnostic) self.print("INFO: starting to parse file\n", .{});
+    while (self.parseStatement()) |st| {
+        try stmts.append(st);
     } else |err| {
         if (Self.parser_diagnostic) {
-            std.debug.print("INFO: error: {}\n", .{err});
+            self.print("INFO: error: {}\n", .{err});
         }
 
         switch (err) {
             Error.EndOfFile => {
-                if (statement_kind == .root_statement) {
+                if (statement_kind == .root_statement and self.last_expected == null) {
                     return stmts.toOwnedSlice();
-                } else return err;
+                }
+                return err;
             },
             Error.UnexpectedToken => {
-                const token = self.currentToken() orelse unreachable;
+                if (Self.parser_diagnostic) {
+                    self.print("INFO: unexpected path: current lexer pos.: {}\n", .{self.lexer.current_position});
+                    self.print("INFO: unexpected path: lexer data size: {}\n", .{self.lexer.data.len});
+                }
+
+                const token = self.currentToken() orelse {
+                    self.print("ERROR: reached the end of the file during parsing\n", .{});
+                    return Error.EndOfFile;
+                };
                 if (std.mem.eql(u8, token.chars, "}") and statement_kind == .code_block_statement)
                     return stmts.toOwnedSlice();
 
                 if (self.last_expected) |kind| {
-                    try unexpectedToken(
-                        self.*,
-                        token,
-                        &[_]Lexer.TokenKind{kind},
-                        self.last_expected_chars,
-                    );
+                    try unexpectedToken(self.*, token, &.{kind}, self.last_expected_chars);
                 } else {
                     try unexpectedToken(
                         self.*,
                         token,
-                        &[_]Lexer.TokenKind{ .Identifier, .Keyword },
+                        &.{ .Identifier, .Keyword },
                         null,
                     );
                 }
+                return err;
             },
             else => return err,
         }
