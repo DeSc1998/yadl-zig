@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
         "control_flow",
         // "data_loading",
         "dictionaries",
-        // "expressions",
+        "expressions",
         // "failing",
         // "functions",
         // "iterator",
@@ -62,6 +62,7 @@ pub fn build(b: *std.Build) void {
     };
 
     const exe_unit_tests = b.addTest(.{
+        .name = "parser",
         .root_source_file = b.path("lib/Parser.zig"),
         .target = target,
         .optimize = optimize,
@@ -74,6 +75,7 @@ pub fn build(b: *std.Build) void {
     for (test_dirs) |dir| {
         const path = b.pathJoin(&[_][]const u8{ "test", dir, "test.zig" });
         const test_case = b.addTest(.{
+            .name = dir,
             .root_source_file = b.path(path),
             .target = target,
             .optimize = optimize,
