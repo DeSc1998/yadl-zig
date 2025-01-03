@@ -2,17 +2,27 @@ const std = @import("std");
 
 const utils = @import("test-utils");
 
-const files = [_][]const u8{
-    "array_access.yadl",
-    "array_modification.yadl",
-    "empty-array.yadl",
-    "nested_array_modification.yadl",
-    "simple1.yadl",
-};
+test "array.access" {
+    const content = @embedFile("array_access.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
 
-test "array" {
-    comptime for (files) |file| {
-        const content = @embedFile(file);
-        try utils.runContent(std.testing.allocator, content);
-    };
+test "array.modification" {
+    const content = @embedFile("array_modification.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
+test "array.modification_nested" {
+    const content = @embedFile("nested_array_modification.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
+test "array.empty" {
+    const content = @embedFile("empty-array.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
+test "array.simple" {
+    const content = @embedFile("simple1.yadl");
+    try utils.runContent(std.testing.allocator, content);
 }

@@ -816,7 +816,7 @@ fn parseStatement(self: *Self) Error!stmt.Statement {
 
 fn parseStatements(self: *Self, statement_kind: StatementKind) Error![]stmt.Statement {
     var stmts = std.ArrayList(stmt.Statement).init(self.allocator);
-    if (statement_kind != .code_block_statement) self.print("INFO: starting to parse file\n", .{});
+    if (statement_kind != .code_block_statement and Self.parser_diagnostic) self.print("INFO: starting to parse file\n", .{});
     while (self.parseStatement()) |st| {
         try stmts.append(st);
     } else |err| {
@@ -832,8 +832,11 @@ fn parseStatements(self: *Self, statement_kind: StatementKind) Error![]stmt.Stat
                 return err;
             },
             Error.UnexpectedToken => {
-                self.print("INFO: unexpected path: current lexer pos.: {}\n", .{self.lexer.current_position});
-                self.print("INFO: unexpected path: lexer data size: {}\n", .{self.lexer.data.len});
+                if (Self.parser_diagnostic) {
+                    self.print("INFO: unexpected path: current lexer pos.: {}\n", .{self.lexer.current_position});
+                    self.print("INFO: unexpected path: lexer data size: {}\n", .{self.lexer.data.len});
+                }
+
                 const token = self.currentToken() orelse {
                     self.print("ERROR: reached the end of the file during parsing\n", .{});
                     return Error.EndOfFile;
