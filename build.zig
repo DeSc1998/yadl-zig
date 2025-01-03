@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) void {
         "data_loading",
         "dictionaries",
         "expressions",
-        // "failing",
+        "failing",
         "functions",
         "iterator",
         "miscellaneous",
