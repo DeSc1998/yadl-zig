@@ -48,17 +48,17 @@ pub fn build(b: *std.Build) void {
     const test_dirs: []const []const u8 = &[_][]const u8{
         "array",
         "control_flow",
-        // "data_loading",
+        "data_loading",
         "dictionaries",
         "expressions",
         // "failing",
         "functions",
         "iterator",
-        // "miscellaneous",
+        "miscellaneous",
         "scoping",
         "stdlib",
         "strings",
-        // "type_conversions",
+        "type_conversions",
     };
 
     const exe_unit_tests = b.addTest(.{
