@@ -55,9 +55,9 @@ pub fn build(b: *std.Build) void {
         "functions",
         "iterator",
         // "miscellaneous",
-        // "scoping",
+        "scoping",
         "stdlib",
-        // "strings",
+        "strings",
         // "type_conversions",
     };
 
