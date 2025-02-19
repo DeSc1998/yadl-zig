@@ -4,9 +4,7 @@ const interpreter = @import("../interpreter.zig");
 const expression = @import("../expression.zig");
 const Scope = @import("../Scope.zig");
 
-pub const Error = error{
-    NotImplemented,
-} || std.mem.Allocator.Error || interpreter.Error;
+pub const Error = std.mem.Allocator.Error || interpreter.Error;
 
 pub const Arity = struct {
     // NOTE: unnamed from the perspective of the call site

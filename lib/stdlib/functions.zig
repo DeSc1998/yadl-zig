@@ -80,7 +80,7 @@ pub fn load_data(args: libtype.CallMatch, scope: *Scope) Error!void {
             std.debug.print("ERROR: loading file failed: {}\n", .{err});
             return Error.NotImplemented;
         };
-    } else return Error.NotImplemented;
+    } else return Error.FormatNotSupportted;
 }
 
 const MAP_FN_INDEX = 1;
@@ -1513,8 +1513,8 @@ pub fn save_data(args: libtype.CallMatch, scope: *Scope) Error!void {
         };
         _ = file.write("\n\n") catch return Error.IOWrite;
     } else if (std.mem.eql(u8, data_format.string.value, "csv")) {
-        return Error.NotImplemented;
-    } else return Error.NotImplemented;
+        return Error.FormatNotSupportted;
+    } else return Error.FormatNotSupportted;
 }
 
 fn save_as_json(writer: std.io.AnyWriter, expr: Expression) !void {

@@ -12,6 +12,7 @@ const Statement = stmt.Statement;
 pub const Error = error{
     NotImplemented,
     FunctionNotFound,
+    FormatNotSupportted,
     ValueNotFound,
     NoEntryForKey,
     IOWrite,
