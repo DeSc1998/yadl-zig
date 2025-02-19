@@ -74,6 +74,7 @@ const mappings = .{
     .{ "check_none", .{ .function = &functions.check_none, .arity = .{ .unnamed_count = 2 } } },
     .{ "filter", .{ .function = &functions.filter, .arity = .{ .unnamed_count = 2 } } },
     .{ "load", .{ .function = &functions.load_data, .arity = .{ .unnamed_count = 2 } } },
+    .{ "save", .{ .function = &functions.save_data, .arity = .{ .unnamed_count = 3 } } },
     .{ "sort", .{ .function = &functions.sort, .arity = .{ .unnamed_count = 2 } } },
     // iterator functions
     .{ "iterator", .{ .function = &functions.iterator, .arity = .{ .unnamed_count = 3 } } },

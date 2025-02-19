@@ -1488,3 +1488,71 @@ pub fn array_contains(args: []const Expression, scope: *Scope) Error!void {
     }
     scope.return_result = try expression.Boolean.init(scope.allocator, false);
 }
+
+pub fn save_data(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const user_data = args.unnamed_args[0];
+    const file_path = args.unnamed_args[1];
+    const data_format = args.unnamed_args[2];
+    std.debug.assert(file_path == .string);
+    std.debug.assert(data_format == .string);
+    const cwd = std.fs.cwd();
+    var buffer: [128]u8 = undefined;
+    const formatted_name = std.fmt.bufPrint(&buffer, "{s}.{s}", .{ file_path.string.value, data_format.string.value }) catch {
+        std.debug.print("ERROR: filename is to large\n", .{});
+        return Error.IOWrite;
+    };
+    var file = cwd.createFile(formatted_name, .{}) catch |err| {
+        scope.out.print("ERROR: failed to create/open file '{s}': {}", .{ formatted_name, err }) catch return Error.IOWrite;
+        return Error.IOWrite;
+    };
+    defer file.close();
+    if (std.mem.eql(u8, data_format.string.value, "json")) {
+        save_as_json(file.writer().any(), user_data) catch |err| {
+            std.debug.print("ERROR: loading file failed: {}\n", .{err});
+            return Error.IOWrite;
+        };
+        _ = file.write("\n\n") catch return Error.IOWrite;
+    } else if (std.mem.eql(u8, data_format.string.value, "csv")) {
+        return Error.NotImplemented;
+    } else return Error.NotImplemented;
+}
+
+fn save_as_json(writer: std.io.AnyWriter, expr: Expression) !void {
+    _ = switch (expr) {
+        .none => try writer.write("null"),
+        .number => |n| {
+            switch (n) {
+                .integer => |int| try writer.print("{}", .{int}),
+                .float => |fl| try writer.print("{d}", .{fl}),
+            }
+        },
+        .boolean => |value| try writer.print("{}", .{value}),
+        .string => |value| try writer.print("{s}", .{value.value}),
+        .dictionary => |dict| {
+            _ = try writer.write("{\n");
+            for (dict.entries[0 .. dict.entries.len - 1]) |entry| {
+                try save_as_json(writer, entry.key.*);
+                _ = try writer.write(": ");
+                try save_as_json(writer, entry.value.*);
+                _ = try writer.write(",\n");
+            }
+            const entry = dict.entries[dict.entries.len - 1];
+            try save_as_json(writer, entry.key.*);
+            _ = try writer.write(": ");
+            try save_as_json(writer, entry.value.*);
+            _ = try writer.write("\n");
+            _ = try writer.write("}\n");
+        },
+        .array => |array| {
+            _ = try writer.write("[");
+            for (array.elements[0 .. array.elements.len - 1]) |entry| {
+                try save_as_json(writer, entry);
+                _ = try writer.write(", ");
+            }
+            const entry = array.elements[array.elements.len - 1];
+            try save_as_json(writer, entry);
+            _ = try writer.write("]");
+        },
+        else => return Error.InvalidExpressoinType,
+    };
+}
