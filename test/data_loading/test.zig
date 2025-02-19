@@ -26,3 +26,8 @@ test "data-loading.loading-and-filter" {
     const content = @embedFile("load_and_filter.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "data-loading.saving-of-json" {
+    const content = @embedFile("json-saving.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
