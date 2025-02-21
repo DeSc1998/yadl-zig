@@ -15,3 +15,6 @@ test-scripts/scala/__pycache__
 test-scripts/__pycache__
 zig-out/lib
 test-save.json
+test-save-csv.csv
+test-save-json.json
+test-save.csv

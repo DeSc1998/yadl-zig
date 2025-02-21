@@ -4,6 +4,6 @@ d = load('test-data/top-level-array.json', 'json')
 
 print(d)
 
-save(d, "test-save", "json")
+save(d, "test-save-json", "json")
 
 // CHECK-OUT: [{key: value}, {key2: value2}, {key3: value3}]

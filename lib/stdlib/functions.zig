@@ -1513,7 +1513,13 @@ pub fn save_data(args: libtype.CallMatch, scope: *Scope) Error!void {
         };
         _ = file.write("\n\n") catch return Error.IOWrite;
     } else if (std.mem.eql(u8, data_format.string.value, "csv")) {
-        return Error.FormatNotSupportted;
+        var expr_map = ExpressionMap.init(scope.allocator);
+        defer expr_map.deinit();
+        save_as_csv(file.writer().any(), user_data, &expr_map) catch |err| {
+            std.debug.print("ERROR: loading file failed: {}\n", .{err});
+            return Error.IOWrite;
+        };
+        _ = file.write("\n\n") catch return Error.IOWrite;
     } else return Error.FormatNotSupportted;
 }
 
@@ -1555,4 +1561,117 @@ fn save_as_json(writer: std.io.AnyWriter, expr: Expression) !void {
         },
         else => return Error.InvalidExpressoinType,
     };
+}
+
+const ExpressionContext = struct {
+    const Self = @This();
+
+    pub fn hash(self: Self, key: Expression) u64 {
+        _ = self;
+        var buffer: [2048]u8 = undefined;
+        var fixedStream = std.io.fixedBufferStream(&buffer);
+        const writer = fixedStream.writer().any();
+        var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+        var scope = Scope.empty(alloc.allocator(), writer);
+        printValue(key, &scope) catch {};
+        return std.hash_map.hashString(fixedStream.getWritten());
+    }
+
+    pub fn eql(self: Self, key: Expression, other: Expression) bool {
+        const key_hash = self.hash(key);
+        const other_hash = self.hash(other);
+        return key_hash == other_hash;
+    }
+};
+
+const ExpressionMap = std.HashMap(Expression, Expression, ExpressionContext, 80);
+
+fn save_as_csv(writer: std.io.AnyWriter, expr: Expression, expr_map: *ExpressionMap) !void {
+    switch (expr) {
+        .array => |elems| {
+            if (elems.elements.len > 0 and elems.elements[0] == .dictionary) {
+                try save_csv_header(writer, elems.elements[0], expr_map);
+                _ = try writer.write("\n");
+            }
+            for (elems.elements) |entry| {
+                try save_csv_entry(writer, entry, expr_map);
+                _ = try writer.write("\n");
+            }
+        },
+        .dictionary => {
+            try save_csv_header(writer, expr, expr_map);
+            _ = try writer.write("\n");
+            try save_csv_dictionary(writer, expr, expr_map);
+        },
+        else => try save_csv_simple_entry(writer, expr),
+    }
+}
+
+fn save_csv_entry(writer: std.io.AnyWriter, expr: Expression, expr_map: *ExpressionMap) !void {
+    switch (expr) {
+        .array => |elems| {
+            var has_printed = false;
+            for (elems.elements) |entry| {
+                if (has_printed) {
+                    _ = try writer.write(", ");
+                } else has_printed = true;
+                try save_csv_simple_entry(writer, entry);
+            }
+        },
+        .dictionary => try save_csv_dictionary(writer, expr, expr_map),
+        else => try save_csv_simple_entry(writer, expr),
+    }
+}
+
+fn save_csv_simple_entry(writer: std.io.AnyWriter, expr: Expression) !void {
+    _ = switch (expr) {
+        .none => try writer.print("\"{s}\"", .{"null"}),
+        .string => |str| try writer.print("\"{s}\"", .{str.value}),
+        .boolean => |value| try writer.print("{}", .{value}),
+        .number => |n| {
+            switch (n) {
+                .float => |f| try writer.print("{d}", .{f}),
+                .integer => |i| try writer.print("{}", .{i}),
+            }
+        },
+        else => return Error.InvalidExpressoinType,
+    };
+}
+fn save_csv_header(writer: std.io.AnyWriter, expr: Expression, expr_map: *ExpressionMap) !void {
+    std.debug.assert(expr == .dictionary);
+    const entries = expr.dictionary.entries;
+    if (entries.len > 0) {
+        for (entries) |entry| {
+            try expr_map.put(entry.key.*, entry.value.*);
+        }
+    } else return;
+    var has_printed = false;
+    var iter = expr_map.keyIterator();
+    while (iter.next()) |entry| {
+        if (has_printed) {
+            _ = try writer.write(", ");
+        } else has_printed = true;
+        var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+        var scope = Scope.empty(alloc.allocator(), writer);
+        try printValue(entry.*, &scope);
+    }
+}
+
+fn save_csv_dictionary(writer: std.io.AnyWriter, expr: Expression, expr_map: *ExpressionMap) !void {
+    std.debug.assert(expr == .dictionary);
+    const entries = expr.dictionary.entries;
+    if (entries.len > 0) {
+        for (entries) |entry| {
+            try expr_map.put(entry.key.*, entry.value.*);
+        }
+    } else return;
+    var has_printed = false;
+    var iter = expr_map.keyIterator();
+    while (iter.next()) |entry| {
+        if (has_printed) {
+            _ = try writer.write(", ");
+        } else has_printed = true;
+        const value = expr_map.getPtr(entry.*) orelse unreachable;
+        try save_csv_simple_entry(writer, value.*);
+    }
 }

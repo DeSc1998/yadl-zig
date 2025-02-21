@@ -31,3 +31,8 @@ test "data-loading.saving-of-json" {
     const content = @embedFile("json-saving.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "data-loading.saving-of-csv" {
+    const content = @embedFile("csv-saving.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
