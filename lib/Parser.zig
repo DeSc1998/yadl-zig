@@ -26,7 +26,7 @@ lexer: Lexer,
 allocator: std.mem.Allocator,
 last_expected: ?Kind = null,
 last_expected_chars: ?[]const u8 = null,
-stderr: std.io.AnyWriter = std.io.getStdErr().writer().any(),
+stderr: std.io.AnyWriter,
 
 var parser_diagnostic: bool = false;
 
@@ -42,6 +42,7 @@ pub fn init(input: []const u8, allocator: std.mem.Allocator) Self {
     return Self{
         .lexer = Lexer.init(input),
         .allocator = allocator,
+        .stderr = std.io.getStdErr().writer().any(),
     };
 }
 
