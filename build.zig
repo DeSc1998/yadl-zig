@@ -96,12 +96,12 @@ pub fn build(b: *std.Build) void {
 
     // building releases
     const release_step = b.step("release", "Build all release targets");
-    addBinaryWithHash(b, release_step, .linux, .x86_64, .ReleaseFast);
-    addBinaryWithHash(b, release_step, .windows, .x86_64, .ReleaseFast);
-    addBinaryWithHash(b, release_step, .macos, .aarch64, .ReleaseFast);
+    addBinary(b, release_step, .linux, .x86_64, .ReleaseFast);
+    addBinary(b, release_step, .windows, .x86_64, .ReleaseFast);
+    addBinary(b, release_step, .macos, .aarch64, .ReleaseFast);
 }
 
-fn addBinaryWithHash(
+fn addBinary(
     b: *std.Build,
     release_step: *std.Build.Step,
     os: std.Target.Os.Tag,
