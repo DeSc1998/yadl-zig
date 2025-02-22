@@ -9,6 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const program_name = if (target.query.os_tag == .macos) "yadl-mac" else if (target.query.os_tag == .windows) "yadl-win" else "yadl-linux";
 
+    // core binaries
     const yadl = b.addStaticLibrary(.{
         .name = "yadl",
         .root_source_file = b.path("lib/lib.zig"),
@@ -37,6 +38,7 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    // testing
     const test_utils = b.addSharedLibrary(.{
         .name = "test-utils",
         .root_source_file = b.path("src/test_utils.zig"),
@@ -84,4 +86,52 @@ pub fn build(b: *std.Build) void {
         const run_test_case = b.addRunArtifact(test_case);
         test_step.dependOn(&run_test_case.step);
     }
+
+    // clean up
+    const clean_step = b.step("clean", "Remove output and cache directory");
+    const clean_output = b.addRemoveDirTree("./zig-out/");
+    const clean_cache = b.addRemoveDirTree("./.zig-cache/");
+    clean_step.dependOn(&clean_output.step);
+    clean_step.dependOn(&clean_cache.step);
+
+    // building releases
+    const release_step = b.step("release", "Build all release targets");
+    addBinaryWithHash(b, release_step, .linux, .x86_64, .ReleaseFast);
+    addBinaryWithHash(b, release_step, .windows, .x86_64, .ReleaseFast);
+    addBinaryWithHash(b, release_step, .macos, .aarch64, .ReleaseFast);
+}
+
+fn addBinaryWithHash(
+    b: *std.Build,
+    release_step: *std.Build.Step,
+    os: std.Target.Os.Tag,
+    arch: std.Target.Cpu.Arch,
+    mode: std.builtin.OptimizeMode,
+) void {
+    const options_release = b.resolveTargetQuery(.{
+        .os_tag = os,
+        .cpu_arch = arch,
+    });
+    const lib_name = std.mem.join(b.allocator, "-", &.{ "yadl", "lib", @tagName(os), @tagName(arch) }) catch @panic("OOM");
+    const yadl_release = b.addStaticLibrary(.{
+        .name = lib_name,
+        .root_source_file = b.path("lib/lib.zig"),
+        .target = options_release,
+        .optimize = mode,
+    });
+
+    const exe_name = std.mem.join(b.allocator, "-", &.{ "yadl", @tagName(os), @tagName(arch) }) catch @panic("OOM");
+    const yadl_exe = b.addExecutable(.{
+        .name = exe_name,
+        .root_source_file = b.path("src/main.zig"),
+        .target = options_release,
+        .optimize = mode,
+    });
+    yadl_exe.root_module.addImport("yadl", &yadl_release.root_module);
+
+    release_step.dependOn(&yadl_release.step);
+    release_step.dependOn(&yadl_exe.step);
+
+    b.installArtifact(yadl_release);
+    b.installArtifact(yadl_exe);
 }
