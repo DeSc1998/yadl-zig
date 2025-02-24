@@ -34,4 +34,9 @@ jobs:
       run: python -m ziglang build test --summary all
     - name: pytest step
       run: python -m pytest test-scripts/
+    - uses: actions/upload-artifact@v4.6.1
+      with:
+        name: release-binaries
+        path: zig-out/bin/yadl-*-*
+        warn: True
 
