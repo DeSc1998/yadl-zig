@@ -1292,6 +1292,47 @@ fn evalFormattedString(string: expression.String, scope: *Scope) Error!void {
     scope.return_result = try expression.String.init(scope.allocator, tmp);
 }
 
+pub fn string_trim(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    if (args.unnamed_args[0].string.value.len == 0) return;
+
+    const string = args.unnamed_args[0].string;
+    var front_index: usize = 0;
+    var back_index: usize = string.value.len - 1;
+    while (std.ascii.isWhitespace(string.value[front_index])) : (front_index += 1) {}
+    while (std.ascii.isWhitespace(string.value[back_index])) : (back_index -= 1) {}
+    const size = back_index - front_index + 1;
+    if (size > 0) {
+        const out = try scope.allocator.alloc(u8, size);
+        for (out, string.value[front_index .. back_index + 1]) |*tmp, value| {
+            tmp.* = value;
+        }
+        scope.return_result = try expression.String.init(scope.allocator, out);
+    } else {
+        scope.return_result = try expression.String.init(scope.allocator, "");
+    }
+}
+
+pub fn string_split(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    std.debug.assert(args.unnamed_args[1] == .string);
+    if (args.unnamed_args[1].string.value.len == 0) {
+        scope.return_result = try args.unnamed_args[0].clone(scope.allocator);
+        return;
+    }
+    var iter = std.mem.splitSequence(
+        u8,
+        args.unnamed_args[0].string.value,
+        args.unnamed_args[1].string.value,
+    );
+    var out = std.ArrayList(Expression).init(scope.allocator);
+    while (iter.next()) |str| {
+        const tmp = try expression.String.init(scope.allocator, str);
+        try out.append(tmp.*);
+    }
+    scope.return_result = try expression.Array.init(scope.allocator, try out.toOwnedSlice());
+}
+
 const DEFAULT_INDEX = 1;
 const DEFAULT_DATA_INDEX = 0;
 fn default_next(data_expr: *Expression, scope: *Scope) Error!void {

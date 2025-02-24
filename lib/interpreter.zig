@@ -124,13 +124,18 @@ fn modify(strct: *Expression, value: *Expression, scope: *Scope) Error!void {
     }
 }
 
-fn evalStdlibCall(context: stdlib.FunctionContext, evaled_args: []Expression, scope: *Scope) Error!void {
+fn evalStdlibCall(
+    name: []const u8,
+    context: stdlib.FunctionContext,
+    evaled_args: []Expression,
+    scope: *Scope,
+) Error!void {
     if (stdlib.match_call_args(evaled_args, context.arity)) |match| {
         context.function(match, scope) catch unreachable; // TODO: handle error once error values are added
     } else |err| {
         std.debug.print(
-            "ERROR: arguments mismatch expected: {}\n",
-            .{err},
+            "ERROR: when calling '{s}': {}\n",
+            .{ name, err },
         );
         return Error.ArityMismatch;
     }
@@ -149,7 +154,7 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
     switch (fc.func.*) {
         .identifier => |id| {
             if (stdlib.builtins.get(id.name)) |fn_ctxt| {
-                try evalStdlibCall(fn_ctxt, tmpArgs, scope);
+                try evalStdlibCall(id.name, fn_ctxt, tmpArgs, scope);
             } else {
                 if (scope.lookupFunction(id)) |f| {
                     const match = stdlib.match_runtime_call_args(tmpArgs, f.arity) catch return Error.ArityMismatch;

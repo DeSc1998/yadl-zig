@@ -1,0 +1,15 @@
+// RUN: DEFAULT
+
+string = 'hello world. this is a message'
+tokens = split(string, ' ')
+iter = default_iterator(tokens)
+while (has_next(iter)) {
+    print(next(iter))
+}
+
+// CHECK-OUT: hello
+// CHECK-OUT: world.
+// CHECK-OUT: this
+// CHECK-OUT: is
+// CHECK-OUT: a
+// CHECK-OUT: message

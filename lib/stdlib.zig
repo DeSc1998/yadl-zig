@@ -59,6 +59,9 @@ const mappings = .{
     .{ "bool", .{ .function = &conversions.toBoolean, .arity = .{ .unnamed_count = 1 } } },
     .{ "number", .{ .function = &conversions.toNumber, .arity = .{ .unnamed_count = 1 } } },
     .{ "string", .{ .function = &conversions.toString, .arity = .{ .unnamed_count = 1 } } },
+    // string ops
+    .{ "trim", .{ .function = &functions.string_trim, .arity = .{ .unnamed_count = 1 } } },
+    .{ "split", .{ .function = &functions.string_split, .arity = .{ .unnamed_count = 2 } } },
     // data stream functions
     .{ "map", .{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
     // NOTE: do function uses map. This might not be intended

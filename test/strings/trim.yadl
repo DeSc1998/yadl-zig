@@ -1,0 +1,12 @@
+// RUN: DEFAULT
+
+
+print(trim('hello'))
+print(trim('   hello'))
+print(trim('hello    '))
+print(trim('     hello    '))
+
+// CHECK-OUT: hello
+// CHECK-OUT: hello
+// CHECK-OUT: hello
+// CHECK-OUT: hello

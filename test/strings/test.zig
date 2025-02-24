@@ -21,3 +21,13 @@ test "strings.format" {
     const content = @embedFile("simple_format.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "strings.trim" {
+    const content = @embedFile("trim.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
+test "strings.split" {
+    const content = @embedFile("split.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
