@@ -38,5 +38,4 @@ jobs:
       with:
         name: release-binaries
         path: zig-out/bin/yadl-*-*
-        warn: True
 
