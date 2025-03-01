@@ -63,6 +63,8 @@ const mappings = .{
     .{ "trim", .{ .function = &functions.string_trim, .arity = .{ .unnamed_count = 1 } } },
     .{ "split", .{ .function = &functions.string_split, .arity = .{ .unnamed_count = 2 } } },
     .{ "count_substring", .{ .function = &functions.string_count, .arity = .{ .unnamed_count = 2 } } },
+    .{ "starts_with", .{ .function = &functions.string_starts_with, .arity = .{ .unnamed_count = 2 } } },
+    .{ "ends_with", .{ .function = &functions.string_ends_with, .arity = .{ .unnamed_count = 2 } } },
     // data stream functions
     .{ "map", .{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
     // NOTE: do function uses map. This might not be intended

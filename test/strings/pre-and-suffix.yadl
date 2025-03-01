@@ -1,0 +1,13 @@
+// RUN: DEFAULT
+
+string = 'hello world'
+print(starts_with(string, "hello"))
+print(starts_with(string, "world"))
+// CHECK-OUT: true
+// CHECK-OUT: false
+
+print(ends_with(string, "hello"))
+print(ends_with(string, "world"))
+// CHECK-OUT: false
+// CHECK-OUT: true
+

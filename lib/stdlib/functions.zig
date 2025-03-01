@@ -1344,6 +1344,26 @@ pub fn string_count(args: libtype.CallMatch, scope: *Scope) Error!void {
     } else scope.return_result = try expression.Number.init(scope.allocator, i64, 0);
 }
 
+pub fn string_starts_with(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    std.debug.assert(args.unnamed_args[1] == .string);
+    scope.return_result = try expression.Boolean.init(scope.allocator, std.mem.startsWith(
+        u8,
+        args.unnamed_args[0].string.value,
+        args.unnamed_args[1].string.value,
+    ));
+}
+
+pub fn string_ends_with(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    std.debug.assert(args.unnamed_args[1] == .string);
+    scope.return_result = try expression.Boolean.init(scope.allocator, std.mem.endsWith(
+        u8,
+        args.unnamed_args[0].string.value,
+        args.unnamed_args[1].string.value,
+    ));
+}
+
 const DEFAULT_INDEX = 1;
 const DEFAULT_DATA_INDEX = 0;
 fn default_next(data_expr: *Expression, scope: *Scope) Error!void {

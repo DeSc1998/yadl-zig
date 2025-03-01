@@ -36,3 +36,8 @@ test "strings.count" {
     const content = @embedFile("count.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "strings.affixes" {
+    const content = @embedFile("pre-and-suffix.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
