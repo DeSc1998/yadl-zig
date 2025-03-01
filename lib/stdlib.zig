@@ -73,7 +73,7 @@ const mappings = .{
     .{ "zip", .{ .function = &functions.zip, .arity = .{ .unnamed_count = 2 } } },
     .{ "flatten", .{ .function = &functions.flatten, .arity = .{ .unnamed_count = 1 } } },
     .{ "reduce", .{ .function = &functions.reduce, .arity = .{ .unnamed_count = 2 } } },
-    .{ "groupBy", .{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
+    .{ "group_by", .{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
     .{ "count", .{ .function = &functions.count, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_all", .{ .function = &functions.check_all, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_any", .{ .function = &functions.check_any, .arity = .{ .unnamed_count = 2 } } },
