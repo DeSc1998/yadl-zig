@@ -1,0 +1,14 @@
+// RUN: DEFAULT
+
+string = 'hello world. this is a message'
+count = count_substring(string, ' ')
+print(count)
+// CHECK-OUT: 5
+
+count = count_substring(string, 'e')
+print(count)
+// CHECK-OUT: 3
+
+count = count_substring(string, '')
+print(count)
+// CHECK-OUT: 0

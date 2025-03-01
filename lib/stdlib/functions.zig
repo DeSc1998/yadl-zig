@@ -1333,6 +1333,17 @@ pub fn string_split(args: libtype.CallMatch, scope: *Scope) Error!void {
     scope.return_result = try expression.Array.init(scope.allocator, try out.toOwnedSlice());
 }
 
+pub fn string_count(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    std.debug.assert(args.unnamed_args[1] == .string);
+    const source = args.unnamed_args[0].string;
+    const needle = args.unnamed_args[1].string;
+    if (needle.value.len > 0) {
+        const out: i64 = @truncate(@as(i128, std.mem.count(u8, source.value, needle.value)));
+        scope.return_result = try expression.Number.init(scope.allocator, i64, out);
+    } else scope.return_result = try expression.Number.init(scope.allocator, i64, 0);
+}
+
 const DEFAULT_INDEX = 1;
 const DEFAULT_DATA_INDEX = 0;
 fn default_next(data_expr: *Expression, scope: *Scope) Error!void {

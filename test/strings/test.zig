@@ -31,3 +31,8 @@ test "strings.split" {
     const content = @embedFile("split.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "strings.count" {
+    const content = @embedFile("count.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
