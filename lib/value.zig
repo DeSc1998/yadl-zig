@@ -117,16 +117,6 @@ pub const Function = struct {
     }
 };
 
-pub const Array = struct {
-    elements: []Value,
-
-    pub fn init(
-        elements: []Value,
-    ) !Value {
-        return .{ .array = .{ .elements = elements } };
-    }
-};
-
 const ValueMap = std.AutoHashMap(Value, Value);
 
 pub const Dictionary = struct {
@@ -197,7 +187,7 @@ const Value = union(enum) {
     number: Number,
     string: []const u8,
     formatted_string: []const u8,
-    array: Array,
+    array: []Value,
     dictionary: Dictionary,
     iterator: Iterator,
     function: Function,
@@ -240,8 +230,14 @@ fn printIdent(out: std.io.AnyWriter, level: u8) !void {
     }
 }
 
-pub fn free(value: Value) void {
+pub fn free(value: Value, alloc: std.mem.Allocator) void {
     if (value == .dictionary) {
         value.dictionary.entries.deinit();
+    } else if (value == .array) {
+        alloc.free(value.array);
+    } else if (value == .string) {
+        alloc.free(value.string);
+    } else if (value == .formatted_string) {
+        alloc.free(value.formatted_string);
     }
 }
