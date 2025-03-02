@@ -1,7 +1,8 @@
-user_data = load("fancy-tests/users.json", "json")
+// RUN: DEFAULT
+user_data = load("test-data/users.json", "json")
 user_data = user_data["users"]
 
-jessy_moved_to_bern = do(user_data, (user) => {
+jessy_moved_to_bern = map(user_data, (user) => {
     if (user["name"] == "Jessy") {
         user["city"] = "Bern"
     }
@@ -11,5 +12,6 @@ jessy_moved_to_bern = do(user_data, (user) => {
 
 old_people_in_bern = filter(jessy_moved_to_bern, (user) => (user["city"] == "Bern") and (user["age"] > 60))
 
-print3(old_people_in_bern)
+print(old_people_in_bern)
 
+// CHECK-OUT: [{id: 1, name: Jane, age: 78, city: Bern}]

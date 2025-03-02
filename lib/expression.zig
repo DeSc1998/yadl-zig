@@ -469,6 +469,7 @@ pub const Expression = union(enum) {
                 } else break :b try Iterator.init(alloc, iter.next_fn.runtime, iter.has_next_fn.runtime, tmp);
             },
             .boolean => |b| try Boolean.init(alloc, b.value),
+            .wrapped => |e| try e.clone(alloc),
             else => |v| {
                 std.debug.print("TODO: clone of {s}\n", .{@tagName(v)});
                 return error.NotImplemented;

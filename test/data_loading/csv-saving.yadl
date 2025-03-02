@@ -1,6 +1,6 @@
 // RUN: DEFAULT
 
-d = load('fancy-tests/weather-data.json', 'json')
+d = load('test-data/weather-data.json', 'json')
 
 print(d)
 

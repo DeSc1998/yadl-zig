@@ -72,17 +72,20 @@ pub fn load_data(args: libtype.CallMatch, scope: *Scope) Error!void {
         scope.return_result = tmp;
     } else if (std.mem.eql(u8, data_format.string.value, "json")) {
         scope.return_result = data.load_json(file_path.string.value, scope.allocator) catch |err| {
-            std.debug.print("ERROR: loading file failed: {}\n", .{err});
+            std.debug.print("ERROR: loading file '{s}' failed: {}\n", .{ file_path.string.value, err });
             return Error.NotImplemented;
         };
     } else if (std.mem.eql(u8, data_format.string.value, "csv")) {
         scope.return_result = data.load_csv(file_path.string.value, scope.allocator) catch |err| {
-            std.debug.print("ERROR: loading file failed: {}\n", .{err});
+            std.debug.print("ERROR: loading file '{s}' failed: {}\n", .{ file_path.string.value, err });
             return Error.NotImplemented;
         };
     } else if (std.mem.eql(u8, data_format.string.value, "chars")) {
         const dir = std.fs.cwd();
-        const file = dir.openFile(file_path.string.value, .{}) catch return Error.IOWrite;
+        const file = dir.openFile(file_path.string.value, .{}) catch |err| {
+            std.debug.print("ERROR: loading file '{s}' failed: {}\n", .{ file_path.string.value, err });
+            return Error.NotImplemented;
+        };
         const stat = file.stat() catch return Error.IOWrite;
         const chars = file.readToEndAlloc(scope.allocator, stat.size) catch return Error.OutOfMemory;
         scope.return_result = try expression.String.init(scope.allocator, chars);

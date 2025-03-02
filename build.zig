@@ -1,8 +1,7 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
+var should_build_release = false;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -25,9 +24,10 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("yadl", &yadl.root_module);
 
+    const run_cmd = b.addRunArtifact(exe);
+
     b.installArtifact(yadl);
     b.installArtifact(exe);
-    const run_cmd = b.addRunArtifact(exe);
 
     run_cmd.step.dependOn(b.getInstallStep());
 
@@ -53,6 +53,7 @@ pub fn build(b: *std.Build) void {
         "data_loading",
         "dictionaries",
         "expressions",
+        "examples",
         "failing",
         "functions",
         "iterator",
@@ -96,6 +97,9 @@ pub fn build(b: *std.Build) void {
 
     // building releases
     const release_step = b.step("release", "Build all release targets");
+    if (b.option(bool, "add-release", "adds all release build targets (default: false)")) |_| {
+        should_build_release = true;
+    }
     addBinary(b, release_step, .linux, .x86_64, .ReleaseFast);
     addBinary(b, release_step, .windows, .x86_64, .ReleaseFast);
     addBinary(b, release_step, .macos, .aarch64, .ReleaseFast);
@@ -132,6 +136,6 @@ fn addBinary(
     release_step.dependOn(&yadl_release.step);
     release_step.dependOn(&yadl_exe.step);
 
-    b.installArtifact(yadl_release);
-    b.installArtifact(yadl_exe);
+    if (should_build_release)
+        b.installArtifact(yadl_exe);
 }

@@ -1,0 +1,34 @@
+// RUN: DEFAULT
+weather_data = load("test-data/weather-data.json", "json")
+
+bern = weather_data["bern"]
+
+has_freezing_days = (city) => {
+    return check_any(city, (item) => item["temp"] < 0)
+}
+
+print("Has Bern freezing days?: " + has_freezing_days(bern))
+
+print("Has Bern not freezing days?: " + check_all(bern, (item) => item["temp"] < 0))
+
+print("Is Bern the best city?: idk, im a computer")
+
+print("Has Bern continuous data?:")
+
+index = 1
+continuous_data = true
+while (index < len(bern) and continuous_data) {
+    if (bern[index-1]["day"] +1 != bern[index]["day"]) {
+        continuous_data = false
+    }
+
+    index = index + 1
+}
+
+print(continuous_data)
+
+// CHECK-OUT: Has Bern freezing days?: true
+// CHECK-OUT: Has Bern not freezing days?: false
+// CHECK-OUT: Is Bern the best city?: idk, im a computer
+// CHECK-OUT: Has Bern continuous data?:
+// CHECK-OUT: false
