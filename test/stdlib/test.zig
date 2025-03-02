@@ -71,3 +71,8 @@ test "stdlib.length" {
     const content = @embedFile("len.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "stdlib.write" {
+    const content = @embedFile("write.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}

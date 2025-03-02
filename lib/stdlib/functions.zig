@@ -1192,6 +1192,18 @@ pub fn print(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
+pub fn write(args: libtype.CallMatch, scope: *Scope) Error!void {
+    if (args.var_args) |vars| {
+        var has_printed = false;
+        for (vars) |*value| {
+            if (has_printed) {
+                scope.out.print(" ", .{}) catch return Error.IOWrite;
+            } else has_printed = true;
+            try printValue(value.*, scope);
+        }
+    }
+}
+
 fn printValue(value: Expression, scope: *Scope) Error!void {
     switch (value) {
         .identifier => |id| {

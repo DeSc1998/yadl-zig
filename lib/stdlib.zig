@@ -90,5 +90,6 @@ const mappings = .{
     .{ "has_next", .{ .function = &functions.iter_has_next, .arity = .{ .unnamed_count = 1 } } },
 
     .{ "print", .{ .function = &functions.print, .arity = .{ .unnamed_count = 0, .has_variadics = true } } },
+    .{ "write", .{ .function = &functions.write, .arity = .{ .unnamed_count = 0, .has_variadics = true } } },
 };
 pub const builtins = std.static_string_map.StaticStringMap(FunctionContext).initComptime(mappings);
