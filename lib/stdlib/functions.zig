@@ -84,11 +84,7 @@ pub fn load_data(args: libtype.CallMatch, scope: *Scope) Error!void {
         const dir = std.fs.cwd();
         const file = dir.openFile(file_path.string.value, .{}) catch return Error.IOWrite;
         const stat = file.stat() catch return Error.IOWrite;
-        const chars = dir.readFileAlloc(
-            scope.allocator,
-            file_path.string.value,
-            stat.size,
-        ) catch return Error.OutOfMemory;
+        const chars = file.readToEndAlloc(scope.allocator, stat.size) catch return Error.OutOfMemory;
         scope.return_result = try expression.String.init(scope.allocator, chars);
     } else return Error.FormatNotSupportted;
 }
