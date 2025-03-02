@@ -2,9 +2,7 @@ const std = @import("std");
 const stmt = @import("statement.zig");
 const stdlibType = @import("stdlib/type.zig");
 
-pub const Identifier = struct {
-    name: []const u8,
-};
+pub const Identifier = @import("expression.zig").Identifier;
 
 pub const Number = union(enum) {
     integer: i64,
@@ -71,26 +69,6 @@ pub const Number = union(enum) {
                 .integer = value,
             } };
         } else unreachable;
-    }
-};
-
-pub const String = struct {
-    value: []const u8,
-
-    pub fn init(value: []const u8) !Value {
-        return .{ .string = String{
-            .value = value,
-        } };
-    }
-
-    pub fn initFormatted(value: []const u8) !Value {
-        return .{ .formatted_string = String{
-            .value = value,
-        } };
-    }
-
-    pub fn eql(self: String, other: String) bool {
-        return std.mem.eql(u8, self.value, other.value);
     }
 };
 
@@ -217,8 +195,8 @@ const Value = union(enum) {
     none: void,
     boolean: bool,
     number: Number,
-    string: String,
-    formatted_string: String,
+    string: []const u8,
+    formatted_string: []const u8,
     array: Array,
     dictionary: Dictionary,
     iterator: Iterator,
