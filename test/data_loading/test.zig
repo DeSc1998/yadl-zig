@@ -17,6 +17,11 @@ test "data-loading.line-loading" {
     try utils.runContent(std.testing.allocator, content);
 }
 
+test "data-loading.chars-loading" {
+    const content = @embedFile("chars_loading.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
 test "data-loading.json-top-level-array" {
     const content = @embedFile("top-level-array.yadl");
     try utils.runContent(std.testing.allocator, content);

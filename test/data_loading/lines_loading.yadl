@@ -1,7 +1,5 @@
 // RUN: DEFAULT
 
-odd = (n) => n % 2 == 0
-
 lines = load("test-data/lines-loading.txt", "lines")
 
 print(lines)

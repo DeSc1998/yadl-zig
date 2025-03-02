@@ -1,0 +1,9 @@
+// RUN: DEFAULT
+
+lines = load("test-data/chars-loading.txt", "chars")
+
+print(lines)
+
+// CHECK-OUT: test line 1
+// CHECK-OUT: test line 2
+// CHECK-OUT: test line 3
