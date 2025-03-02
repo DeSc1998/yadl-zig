@@ -1614,7 +1614,7 @@ fn save_as_json(writer: std.io.AnyWriter, expr: Expression) !void {
             }
         },
         .boolean => |value| try writer.print("{}", .{value}),
-        .string => |value| try writer.print("{s}", .{value.value}),
+        .string => |value| try writer.print("\"{s}\"", .{value.value}),
         .dictionary => |dict| {
             _ = try writer.write("{\n");
             for (dict.entries[0 .. dict.entries.len - 1]) |entry| {
