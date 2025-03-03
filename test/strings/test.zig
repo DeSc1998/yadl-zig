@@ -7,6 +7,11 @@ test "strings.concat" {
     try utils.runContent(std.testing.allocator, content);
 }
 
+test "strings.repeat" {
+    const content = @embedFile("repeat.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
 test "strings.simple" {
     const content = @embedFile("simple.yadl");
     try utils.runContent(std.testing.allocator, content);

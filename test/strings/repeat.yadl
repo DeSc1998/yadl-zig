@@ -1,0 +1,9 @@
+// RUN: DEFAULT
+
+string = "test"
+repeated = repeat(string, 3)
+
+print(repeated)
+
+// CHECK-OUT: testtesttest
+

@@ -1365,6 +1365,25 @@ pub fn string_count(args: libtype.CallMatch, scope: *Scope) Error!void {
     } else scope.return_result = try expression.Number.init(scope.allocator, i64, 0);
 }
 
+pub fn string_repeat(args: libtype.CallMatch, scope: *Scope) Error!void {
+    std.debug.assert(args.unnamed_args[0] == .string);
+    std.debug.assert(args.unnamed_args[1] == .number);
+    const reps = args.unnamed_args[1].number;
+    const source = args.unnamed_args[0].string.value;
+    if (reps != .integer) {
+        std.log.err("in 'repeat': can not repeat a string in a fractional amount", .{});
+        return Error.InvalidExpressoinType;
+    }
+    const repeats = @as(usize, @intCast(reps.integer));
+    const out = try scope.allocator.alloc(u8, repeats * source.len);
+    for (0..repeats) |index| {
+        const start = index * source.len;
+        const end = (index + 1) * source.len;
+        @memcpy(out[start..end], source);
+    }
+    scope.return_result = try expression.String.init(scope.allocator, out);
+}
+
 pub fn string_starts_with(args: libtype.CallMatch, scope: *Scope) Error!void {
     std.debug.assert(args.unnamed_args[0] == .string);
     std.debug.assert(args.unnamed_args[1] == .string);

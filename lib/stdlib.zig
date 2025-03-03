@@ -62,6 +62,7 @@ const mappings = .{
     // string ops
     .{ "trim", .{ .function = &functions.string_trim, .arity = .{ .unnamed_count = 1 } } },
     .{ "split", .{ .function = &functions.string_split, .arity = .{ .unnamed_count = 2 } } },
+    .{ "repeat", .{ .function = &functions.string_repeat, .arity = .{ .unnamed_count = 2 } } },
     .{ "count_substring", .{ .function = &functions.string_count, .arity = .{ .unnamed_count = 2 } } },
     .{ "starts_with", .{ .function = &functions.string_starts_with, .arity = .{ .unnamed_count = 2 } } },
     .{ "ends_with", .{ .function = &functions.string_ends_with, .arity = .{ .unnamed_count = 2 } } },
