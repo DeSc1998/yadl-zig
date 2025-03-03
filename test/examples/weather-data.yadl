@@ -7,9 +7,9 @@ has_freezing_days = (city) => {
     return check_any(city, (item) => item["temp"] < 0)
 }
 
-print("Has Bern freezing days?: " + has_freezing_days(bern))
+print("Has Bern freezing days?:", has_freezing_days(bern))
 
-print("Has Bern not freezing days?: " + check_all(bern, (item) => item["temp"] < 0))
+print("Has Bern not freezing days?:", string(check_all(bern, (item) => item["temp"] < 0)))
 
 print("Is Bern the best city?: idk, im a computer")
 

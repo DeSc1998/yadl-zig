@@ -365,31 +365,13 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                     out.* = .{ .string = .{ .value = tmp } };
                     scope.return_result = out;
                 },
-                .boolean => {
-                    var tmp_array = [1]Expression{rightEval};
-                    try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                        scope,
+                else => |value| {
+                    std.log.err(
+                        "right hand side of addition is {s}. Consider using the 'string' conversion function",
+                        .{@tagName(value)},
                     );
-                    const r = scope.result() orelse unreachable;
-                    const out = try scope.allocator.create(Expression);
-                    const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ l.value, r.string.value });
-                    out.* = .{ .string = .{ .value = inner } };
-                    scope.return_result = out;
+                    return Error.InvalidExpressoinType;
                 },
-                .number => {
-                    var tmp_array = [1]Expression{rightEval};
-                    try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                        scope,
-                    );
-                    const r = scope.result() orelse unreachable;
-                    const out = try scope.allocator.create(Expression);
-                    const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ l.value, r.string.value });
-                    out.* = .{ .string = .{ .value = inner } };
-                    scope.return_result = out;
-                },
-                else => return Error.NotImplemented,
             },
             .number => |l| switch (rightEval) {
                 .number => |r| {
@@ -402,44 +384,20 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = tmp;
                     }
                 },
-                .string => |str| {
-                    var tmp_array = [1]Expression{leftEval};
-                    try stdlib.conversions.toString(
-                        stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                        scope,
+                else => |value| {
+                    std.log.err(
+                        "right hand side of addition is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
                     );
-                    const r = scope.result() orelse unreachable;
-                    const out = try scope.allocator.create(Expression);
-                    const inner = try std.mem.join(scope.allocator, "", &[_][]const u8{ r.string.value, str.value });
-                    out.* = .{ .string = .{ .value = inner } };
-                    scope.return_result = out;
-                },
-                else => {
-                    std.debug.print("ERROR: arith. op. add: left = number, right = {s}\n", .{@tagName(rightEval)});
-                    return Error.NotImplemented;
+                    return Error.InvalidExpressoinType;
                 },
             },
             else => |e| {
-                var tmp_array = [1]Expression{e};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
+                std.log.err(
+                    "left hand side of addition is {s} which is not supportted implicitly.",
+                    .{@tagName(e)},
                 );
-                const l = scope.result() orelse unreachable;
-                tmp_array = [1]Expression{rightEval};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
-                );
-                const r = scope.result() orelse unreachable;
-                const res = l.number.add(r.number);
-                if (res == .float) {
-                    const tmp = try expr.Number.init(scope.allocator, f64, res.float);
-                    scope.return_result = tmp;
-                } else {
-                    const tmp = try expr.Number.init(scope.allocator, i64, res.integer);
-                    scope.return_result = tmp;
-                }
+                return Error.InvalidExpressoinType;
             },
         },
         .Mul => switch (leftEval) {
@@ -454,48 +412,20 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = tmp;
                     }
                 },
-                else => |v| {
-                    std.debug.print("ERROR: unhandled case in arith. Mul - number: {}\n", .{v});
-                    return Error.NotImplemented;
-                },
-            },
-            .string => |l| switch (rightEval) {
-                .number => |r| {
-                    std.debug.assert(r == .integer and r.integer >= 0);
-                    const count = r.integer;
-                    const tmp = try scope.allocator.alloc(u8, l.value.len * @as(usize, @intCast(count)));
-                    for (0..@as(usize, @intCast(count))) |current| {
-                        const index = current * l.value.len;
-                        @memcpy(tmp[index .. index + l.value.len], l.value);
-                    }
-                    scope.return_result = try expr.String.init(scope.allocator, tmp);
-                },
-                else => |v| {
-                    std.debug.print("ERROR: unhandled case in arith. Mul - number: {}\n", .{v});
-                    return Error.NotImplemented;
+                else => |value| {
+                    std.log.err(
+                        "right hand side of multiplication is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
+                    );
+                    return Error.InvalidExpressoinType;
                 },
             },
             else => |e| {
-                var tmp_array = [1]Expression{e};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
+                std.log.err(
+                    "left hand side of multiplication is {s} which is not supportted implicitly.",
+                    .{@tagName(e)},
                 );
-                const l = scope.result() orelse unreachable;
-                tmp_array = [1]Expression{rightEval};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
-                );
-                const r = scope.result() orelse unreachable;
-                const res = l.number.mul(r.number);
-                if (res == .float) {
-                    const tmp = try expr.Number.init(scope.allocator, f64, res.float);
-                    scope.return_result = tmp;
-                } else {
-                    const tmp = try expr.Number.init(scope.allocator, i64, res.integer);
-                    scope.return_result = tmp;
-                }
+                return Error.InvalidExpressoinType;
             },
         },
         .Sub => switch (leftEval) {
@@ -510,29 +440,20 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = tmp;
                     }
                 },
-                else => return Error.NotImplemented,
+                else => |value| {
+                    std.log.err(
+                        "right hand side of subtracion is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
+                    );
+                    return Error.InvalidExpressoinType;
+                },
             },
             else => |e| {
-                var tmp_array = [1]Expression{e};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
+                std.log.err(
+                    "left hand side of multiplication is {s} which is not supportted implicitly.",
+                    .{@tagName(e)},
                 );
-                const l = scope.result() orelse unreachable;
-                tmp_array = [1]Expression{rightEval};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
-                );
-                const r = scope.result() orelse unreachable;
-                const res = l.number.sub(r.number);
-                if (res == .float) {
-                    const tmp = try expr.Number.init(scope.allocator, f64, res.float);
-                    scope.return_result = tmp;
-                } else {
-                    const tmp = try expr.Number.init(scope.allocator, i64, res.integer);
-                    scope.return_result = tmp;
-                }
+                return Error.InvalidExpressoinType;
             },
         },
         .Div => switch (leftEval) {
@@ -547,32 +468,20 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = tmp;
                     }
                 },
-                else => |v| {
-                    std.debug.print("ERROR: unhandled case in arith. Div - number: {}\n", .{v});
-                    return Error.NotImplemented;
+                else => |value| {
+                    std.log.err(
+                        "right hand side of division is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
+                    );
+                    return Error.InvalidExpressoinType;
                 },
             },
             else => |e| {
-                var tmp_array = [1]Expression{e};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
+                std.log.err(
+                    "left hand side of division is {s} which is not supportted implicitly.",
+                    .{@tagName(e)},
                 );
-                const l = scope.result() orelse unreachable;
-                tmp_array = [1]Expression{rightEval};
-                try stdlib.conversions.toNumber(
-                    stdlib.libtype.CallMatch.init(tmp_array[0..1], null, null),
-                    scope,
-                );
-                const r = scope.result() orelse unreachable;
-                const res = l.number.div(r.number);
-                if (res == .float) {
-                    const tmp = try expr.Number.init(scope.allocator, f64, res.float);
-                    scope.return_result = tmp;
-                } else {
-                    const tmp = try expr.Number.init(scope.allocator, i64, res.integer);
-                    scope.return_result = tmp;
-                }
+                return Error.InvalidExpressoinType;
             },
         },
         .Expo => switch (leftEval) {
@@ -587,11 +496,20 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = tmp;
                     }
                 },
-                else => return Error.NotImplemented,
+                else => |value| {
+                    std.log.err(
+                        "Exponent is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
+                    );
+                    return Error.InvalidExpressoinType;
+                },
             },
-            else => {
-                std.debug.print("ERROR: can not add value of type '{s}'\n", .{@tagName(leftEval)});
-                return Error.NotImplemented;
+            else => |value| {
+                std.log.err(
+                    "right hand side of exponent is {s} which is not supportted implicitly.",
+                    .{@tagName(value)},
+                );
+                return Error.InvalidExpressoinType;
             },
         },
         .Mod => switch (leftEval) {
@@ -608,9 +526,21 @@ fn evalArithmeticOps(op: expr.ArithmeticOps, left: *Expression, right: *Expressi
                         scope.return_result = try expr.Number.init(scope.allocator, f64, tmp);
                     }
                 },
-                else => return Error.NotImplemented,
+                else => |value| {
+                    std.log.err(
+                        "right hand side is {s}. Consider using the 'number' conversion function",
+                        .{@tagName(value)},
+                    );
+                    return Error.InvalidExpressoinType;
+                },
             },
-            else => return Error.NotImplemented,
+            else => |value| {
+                std.log.err(
+                    "left hand side of modulo is {s} which is not supportted implicitly.",
+                    .{@tagName(value)},
+                );
+                return Error.InvalidExpressoinType;
+            },
         },
     }
 }

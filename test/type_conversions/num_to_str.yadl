@@ -1,5 +1,5 @@
 // RUN: DEFAULT
 
-print('x' + 5)
+print('x' + string(5))
 
 // CHECK-OUT: x5

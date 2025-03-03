@@ -1,5 +1,5 @@
 // RUN: DEFAULT
 
-print("Hello " + true)
+print("Hello " + string(true))
 
 // CHECK-OUT: Hello true

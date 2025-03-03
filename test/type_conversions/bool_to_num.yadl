@@ -1,5 +1,5 @@
 // RUN: DEFAULT
 
-print(true + 4)
+print(number(true) + 4)
 
 // CHECK-OUT: 5

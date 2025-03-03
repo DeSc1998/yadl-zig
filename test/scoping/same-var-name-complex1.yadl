@@ -2,7 +2,7 @@
 x = 3
 x = (x) => {
     x = (x) => x + 1
-    x = x(x == 1)
+    x = x(number(x == 1))
 
     print((() => x)())
 }
