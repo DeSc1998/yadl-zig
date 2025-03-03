@@ -42,6 +42,31 @@ pub fn toNumber(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
+pub fn asInterger(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const expr = args.unnamed_args[0];
+    if (expr == .number) {
+        switch (expr.number) {
+            .integer => scope.return_result = try expr.clone(scope.allocator),
+            .float => |f| scope.return_result = try expression.Number.init(
+                scope.allocator,
+                i64,
+                @intFromFloat(f),
+            ),
+        }
+    } else {
+        try toNumber(args, scope);
+        const result = scope.result() orelse unreachable;
+        switch (result.number) {
+            .integer => scope.return_result = try result.clone(scope.allocator),
+            .float => |f| scope.return_result = try expression.Number.init(
+                scope.allocator,
+                i64,
+                @intFromFloat(f),
+            ),
+        }
+    }
+}
+
 pub fn toString(args: libtype.CallMatch, scope: *Scope) Error!void {
     const expr = args.unnamed_args[0];
     switch (expr) {

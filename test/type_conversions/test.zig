@@ -27,6 +27,11 @@ test "type-conversion.conversion-calls" {
     try utils.runContent(std.testing.allocator, content);
 }
 
+test "type-conversion.integer-conversions" {
+    const content = @embedFile("int-casting.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
+
 test "type-conversion.string-conversions" {
     const content = @embedFile("string_conversions.yadl");
     try utils.runContent(std.testing.allocator, content);

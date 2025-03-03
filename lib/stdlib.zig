@@ -58,6 +58,7 @@ const mappings = .{
     // conversions
     .{ "bool", .{ .function = &conversions.toBoolean, .arity = .{ .unnamed_count = 1 } } },
     .{ "number", .{ .function = &conversions.toNumber, .arity = .{ .unnamed_count = 1 } } },
+    .{ "as_int", .{ .function = &conversions.asInterger, .arity = .{ .unnamed_count = 1 } } },
     .{ "string", .{ .function = &conversions.toString, .arity = .{ .unnamed_count = 1 } } },
     // string ops
     .{ "trim", .{ .function = &functions.string_trim, .arity = .{ .unnamed_count = 1 } } },

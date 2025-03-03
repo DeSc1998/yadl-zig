@@ -1,0 +1,6 @@
+// RUN: DEFAULT
+
+print( as_int( 3.141592 ) )
+// print( as_int( '3.141592' ) )
+
+// CHECK-OUT: 3
