@@ -44,6 +44,16 @@ pub const Number = union(enum) {
         }
     }
 
+    pub fn mod(self: Number, other: Number) Number {
+        if (self == .integer and other == .integer and other.integer > 0) {
+            const out = std.math.mod(i64, self.integer, other.integer) catch unreachable;
+            return Number{ .integer = out };
+        } else {
+            const out = std.math.mod(f64, self.asFloat(), other.asFloat()) catch std.math.nan(f64);
+            return Number{ .float = out };
+        }
+    }
+
     pub fn div(self: Number, other: Number) Number {
         return Number{ .float = self.asFloat() / other.asFloat() };
     }
@@ -117,7 +127,38 @@ pub const Function = struct {
     }
 };
 
-const ValueMap = std.AutoHashMap(Value, Value);
+const ValueContext = struct {
+    const Self = @This();
+    const funcs = @import("stdlib/functions.zig");
+    const Scope = @import("Scope.zig");
+    const CallMatch = @import("stdlib/type.zig").CallMatch;
+    const OptionalArg = @import("stdlib/type.zig").OptionalArg;
+    pub fn hash(self: Self, key: Value) u64 {
+        _ = self;
+        var buffer: [2048]u8 = undefined;
+        var fixed_stream = std.io.fixedBufferStream(&buffer);
+        const writer = fixed_stream.writer().any();
+        var alloc = std.heap.GeneralPurposeAllocator(.{}){};
+        var scope = Scope.empty(alloc.allocator(), writer);
+        var tmp: [1]Value = [1]Value{key};
+        const args: CallMatch = .{
+            .unnamed_args = &[0]Value{},
+            .optional_args = &[0]OptionalArg{},
+            .var_args = &tmp,
+        };
+        funcs.print(args, &scope) catch {};
+        const used = fixed_stream.getWritten();
+        return std.hash_map.hashString(used);
+    }
+
+    pub fn eql(self: Self, key: Value, other: Value) bool {
+        const key_hash = self.hash(key);
+        const other_hash = self.hash(other);
+        return key_hash == other_hash;
+    }
+};
+
+pub const ValueMap = std.HashMap(Value, Value, ValueContext, 80);
 
 pub const Dictionary = struct {
     entries: ValueMap,
@@ -150,13 +191,13 @@ pub const Iterator = struct {
         runtime: Function,
         builtin: stdlibType.PeekFn,
     },
-    data: Value,
+    data: []Value,
 
     pub fn init(
         next_fn: Function,
         has_next_fn: Function,
         peek_fn: ?Function,
-        data: Value,
+        data: []Value,
     ) Value {
         return .{ .iterator = .{
             .next_fn = .{ .runtime = next_fn },
@@ -170,7 +211,7 @@ pub const Iterator = struct {
         next_fn: stdlibType.NextFn,
         has_next_fn: stdlibType.HasNextFn,
         peek_fn: stdlibType.PeekFn,
-        data: Value,
+        data: []Value,
     ) Value {
         return .{ .iterator = .{
             .next_fn = .{ .builtin = next_fn },
@@ -181,8 +222,8 @@ pub const Iterator = struct {
     }
 };
 
-const Value = union(enum) {
-    none: void,
+pub const Value = union(enum) {
+    none: ?void,
     boolean: bool,
     number: Number,
     string: []const u8,
@@ -193,7 +234,7 @@ const Value = union(enum) {
     function: Function,
 
     pub fn none() Value {
-        return .{.none};
+        return Value{ .none = null };
     }
 
     pub fn eql(self: Value, other: Value) bool {
@@ -201,6 +242,23 @@ const Value = union(enum) {
             .number => |n| {
                 if (other == .number) {
                     return n.eql(other.number);
+                } else return false;
+            },
+            .string => |str| return if (other == .string) std.mem.eql(u8, str, other.string) else false,
+            .dictionary => |dict| {
+                if (other == .dictionary) {
+                    const same_count = dict.entries.count() == other.dictionary.entries.count();
+                    if (!same_count) return false;
+                    var iter_self = dict.entries.iterator();
+                    while (iter_self.next()) |entry| {
+                        const right = other.dictionary.entries.get(entry.key_ptr.*);
+                        if (right) |value| {
+                            if (!entry.value_ptr.eql(value)) return false;
+                        } else return false;
+                    }
+                    return true;
+                } else if (other == .none) {
+                    return dict.entries.count() == 0;
                 } else return false;
             },
             else => return false,

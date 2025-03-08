@@ -6,7 +6,7 @@ const stdlib = @import("stdlib.zig");
 const Expression = expr.Expression;
 const Statement = stmt.Statement;
 
-const Bindings = std.StringHashMap(*Expression);
+const Bindings = std.StringHashMap(expr.Value);
 const Functions = std.StringHashMap(expr.Function);
 
 const Scope = @This();
@@ -20,7 +20,7 @@ out: std.io.AnyWriter,
 parent: ?*Scope = null,
 locals: Bindings,
 functions: Functions,
-return_result: ?*Expression = null,
+return_result: ?expr.Value = null,
 
 pub fn empty(alloc: std.mem.Allocator, out: std.io.AnyWriter) Scope {
     return .{
@@ -65,12 +65,12 @@ pub fn fromCallMatch(
         .locals = Bindings.init(alloc),
         .functions = Functions.init(alloc),
     };
-    for (func_arity.args, call_match.unnamed_args) |v, *e| {
+    for (func_arity.args, call_match.unnamed_args) |v, e| {
         try tmp.locals.put(v.name, e);
     }
     if (func_arity.var_args) |vars_id| {
-        const tmp_vars = try expr.Array.init(alloc, call_match.var_args.?);
-        try tmp.locals.put(vars_id.name, tmp_vars);
+        const tmp_vars = call_match.var_args.?;
+        try tmp.locals.put(vars_id.name, .{ .array = tmp_vars });
     }
 
     return tmp;
@@ -80,14 +80,7 @@ pub fn hasResult(self: Scope) bool {
     return if (self.return_result) |_| true else false;
 }
 
-pub fn result(self: *Scope) ?Expression {
-    if (self.return_result) |res| {
-        self.return_result = null;
-        return res.*;
-    } else return null;
-}
-
-pub fn result_ref(self: *Scope) ?*Expression {
+pub fn result(self: *Scope) ?expr.Value {
     if (self.return_result) |res| {
         self.return_result = null;
         return res;
@@ -98,21 +91,13 @@ pub fn isGlobal(self: Scope) bool {
     return if (self.parent) |_| false else true;
 }
 
-pub fn lookup(self: Scope, ident: expr.Identifier) Error!?*Expression {
+pub fn lookup(self: Scope, ident: expr.Identifier) ?expr.Value {
     if (self.locals.get(ident.name)) |ex| {
-        if (ex.* == .identifier and !std.mem.eql(u8, ex.identifier.name, ident.name)) {
-            return ex;
-        } else if (ex.* != .identifier) {
-            return ex;
-        } else {
-            return self.lookupInParent(ident);
-        }
+        return ex;
     } else {
-        return try self.lookupInParent(ident) orelse b: {
+        return self.lookupInParent(ident) orelse b: {
             const f = self.lookupFunction(ident) orelse break :b null;
-            const out = try self.allocator.create(Expression);
-            out.* = .{ .function = f };
-            break :b out;
+            break :b .{ .function = f };
         };
     }
 }
@@ -125,9 +110,9 @@ pub fn lookupFunction(self: Scope, ident: expr.Identifier) ?expr.Function {
     }
 }
 
-fn lookupInParent(self: Scope, ident: expr.Identifier) Error!?*Expression {
+fn lookupInParent(self: Scope, ident: expr.Identifier) ?expr.Value {
     if (self.parent) |p| {
-        return try p.lookup(ident);
+        return p.lookup(ident);
     } else return null;
 }
 
@@ -141,17 +126,18 @@ fn lookupFunctionInParent(self: Scope, ident: expr.Identifier) ?expr.Function {
     } else return null;
 }
 
-pub fn update(self: *Scope, ident: expr.Identifier, value: *Expression) Error!void {
-    if (value.* == .function) {
+pub fn update(self: *Scope, ident: expr.Identifier, value: expr.Value) Error!void {
+    if (value == .function) {
+        const f = value.function;
         if (self.functions.get(ident.name)) |_| {
-            const new_body = try self.captureExternals(value.function.arity, value.function.body);
+            const new_body = try self.captureExternals(f.arity, f.body);
             const new_fn = .{
-                .arity = value.function.arity,
+                .arity = f.arity,
                 .body = new_body,
             };
             try self.functions.put(ident.name, new_fn);
         } else {
-            try self.functions.put(ident.name, value.function);
+            try self.functions.put(ident.name, f);
         }
     } else {
         try self.locals.put(ident.name, value);
@@ -225,29 +211,30 @@ fn captureFromStatement(statement: Statement, bound: *std.ArrayList([]const u8),
 fn captureFromValue(value: *const Expression, bound: *std.ArrayList([]const u8), scope: *Scope) Error!*Expression {
     return switch (value.*) {
         .wrapped => |e| captureFromValue(e, bound, scope),
+        .value => |v| b: {
+            if (v == .function) {
+                const f = v.function;
+                const new_body = try scope.allocator.alloc(Statement, f.body.len);
+                for (f.body, new_body) |st, *new_st| {
+                    new_st.* = try captureFromStatement(st, bound, scope);
+                }
+                break :b expr.initValue(scope.allocator, .{ .function = .{
+                    .arity = f.arity,
+                    .body = new_body,
+                } });
+            } else break :b value.clone(scope.allocator);
+        },
         .identifier => |id| b: {
             for (bound.items) |item| {
                 if (std.mem.eql(u8, item, id.name)) {
                     break :b value.clone(scope.allocator);
                 }
             }
-            if (try scope.lookup(id)) |out| {
-                break :b out.clone(scope.allocator);
+            if (scope.lookup(id)) |out| {
+                break :b expr.initValue(scope.allocator, out);
             } else {
                 break :b value.clone(scope.allocator);
             }
-        },
-        .function => |f| b: {
-            const new_body = try scope.allocator.alloc(Statement, f.body.len);
-            for (f.body, new_body) |st, *new_st| {
-                new_st.* = try captureFromStatement(st, bound, scope);
-            }
-            const out = try scope.allocator.create(Expression);
-            out.* = .{ .function = .{
-                .arity = f.arity,
-                .body = new_body,
-            } };
-            break :b out;
         },
         .functioncall => |fc| b: {
             const func = try captureFromValue(fc.func, bound, scope);

@@ -273,12 +273,12 @@ pub fn parseExpression(self: *Self, presedence: usize) Error!*expr.Expression {
     }
 }
 
-fn parseBoolean(self: *Self) Error!*expr.Expression {
+fn parseBoolean(self: *Self) Error!expr.Value {
     const b = self.expect(.Boolean, null) catch unreachable;
     if (std.mem.eql(u8, b.chars, "true")) {
-        return expr.Boolean.init(self.allocator, true);
+        return .{ .boolean = true };
     } else if (std.mem.eql(u8, b.chars, "false")) {
-        return expr.Boolean.init(self.allocator, false);
+        return .{ .boolean = false };
     }
     unreachable;
 }
@@ -298,7 +298,7 @@ fn parseValue(self: *Self) Error!*expr.Expression {
                 }
                 return self.parseIdentifier();
             },
-            .Boolean => return self.parseBoolean(),
+            .Boolean => return expr.initValue(self.allocator, try self.parseBoolean()),
             .String => return self.parseString(),
             .FormattedString => return self.parseFormattedString(),
             .OpenParen => {
@@ -316,9 +316,7 @@ fn parseValue(self: *Self) Error!*expr.Expression {
             .Operator => return self.parseUnaryOp(),
             .Keyword => {
                 _ = try self.expect(.Keyword, "none");
-                const out = try self.allocator.create(expr.Expression);
-                out.* = .{ .none = null };
-                return out;
+                return expr.initValue(self.allocator, expr.Value.none());
             },
             else => {
                 self.last_expected = .Unknown;
@@ -437,12 +435,12 @@ fn parseWrappedExpression(self: *Self) Error!*expr.Expression {
 
 fn parseString(self: *Self) Error!*expr.Expression {
     const str = self.expect(.String, null) catch unreachable;
-    return expr.String.init(self.allocator, str.chars);
+    return expr.initValue(self.allocator, .{ .string = str.chars });
 }
 
 fn parseFormattedString(self: *Self) Error!*expr.Expression {
     const str = self.expect(.FormattedString, null) catch unreachable;
-    return expr.String.initFormatted(self.allocator, str.chars);
+    return expr.initValue(self.allocator, .{ .formatted_string = str.chars });
 }
 
 fn parseFunctionCallExpr(self: *Self) Error!*expr.Expression {
@@ -508,7 +506,7 @@ fn parseFunction(self: *Self) Error!*expr.Expression {
     const pos = self.lexer.current_position;
 
     if (self.parseCodeblock()) |body| {
-        return expr.Function.init(self.allocator, arity, body);
+        return expr.initValue(self.allocator, expr.Function.init(arity, body));
     } else |err| {
         if (err != Error.UnexpectedToken) {
             return err;
@@ -518,7 +516,7 @@ fn parseFunction(self: *Self) Error!*expr.Expression {
         const ret: stmt.Return = .{ .value = ex };
         var statemants = try self.allocator.alloc(stmt.Statement, 1);
         statemants[0] = .{ .@"return" = ret };
-        return expr.Function.init(self.allocator, arity, statemants);
+        return expr.initValue(self.allocator, expr.Function.init(arity, statemants));
     }
 }
 
@@ -570,11 +568,11 @@ fn parseNumber(self: *Self) Error!*expr.Expression {
             @floatFromInt(fraction_part.len),
         );
         const composite = @as(f64, @floatFromInt(int)) + frac;
-        return expr.Number.init(self.allocator, f64, composite);
+        return expr.initValue(self.allocator, .{ .number = .{ .float = composite } });
     } else {
         const int_part = if (base == 10) digits.chars else digits.chars[2..];
         const num = std.fmt.parseInt(i64, int_part, base) catch return Error.NumberParsingFailure;
-        return expr.Number.init(self.allocator, i64, num);
+        return expr.initValue(self.allocator, .{ .number = .{ .integer = num } });
     }
 }
 

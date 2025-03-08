@@ -27,7 +27,7 @@ pub const MatchError = error{
     MissplacedArguments,
 };
 
-pub fn match_call_args(exprs: []Expression, arity: libtype.Arity) MatchError!libtype.CallMatch {
+pub fn match_call_args(exprs: []expression.Value, arity: libtype.Arity) MatchError!libtype.CallMatch {
     // TODO: add support for optional arguments and variadic arguments
     if (exprs.len > arity.unnamed_count and !arity.has_variadics) return MatchError.TooManyArguments;
     if (exprs.len < arity.unnamed_count) return MatchError.NotEnoughArguments;
@@ -38,7 +38,7 @@ pub fn match_call_args(exprs: []Expression, arity: libtype.Arity) MatchError!lib
     };
 }
 
-pub fn match_runtime_call_args(exprs: []Expression, arity: expression.Function.Arity) MatchError!libtype.CallMatch {
+pub fn match_runtime_call_args(exprs: []expression.Value, arity: expression.Function.Arity) MatchError!libtype.CallMatch {
     // TODO: add support for optional arguments and variadic arguments
     const has_variadics = if (arity.var_args) |_| true else false;
     if (exprs.len > arity.args.len and !has_variadics) return MatchError.TooManyArguments;

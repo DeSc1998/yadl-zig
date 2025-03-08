@@ -19,7 +19,7 @@ pub fn load_lines(path: []const u8, allocator: std.mem.Allocator) ![][]const u8 
     return try out.toOwnedSlice();
 }
 
-pub fn load_json(path: []const u8, allocator: std.mem.Allocator) !*expression.Expression {
+pub fn load_json(path: []const u8, allocator: std.mem.Allocator) !expression.Value {
     const cwd = std.fs.cwd();
     const file = try cwd.openFile(path, .{ .mode = .read_only });
     const stat = try file.stat();
@@ -34,7 +34,7 @@ pub fn load_json(path: []const u8, allocator: std.mem.Allocator) !*expression.Ex
     return map_to_expression(allocator, value);
 }
 
-pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !*expression.Expression {
+pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !expression.Value {
     const cwd = std.fs.cwd();
     const file = try cwd.openFile(path, .{ .mode = .read_only });
     const stat = try file.stat();
@@ -61,55 +61,47 @@ pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !*expression.Exp
         }
     }
 
-    var out = std.ArrayList(expression.Expression).init(allocator);
+    var out = std.ArrayList(expression.Value).init(allocator);
     while (splitter.next()) |line| {
         const data = parse_line(line, allocator) catch |err| if (err == error.LineEmpty) continue else return err;
         if (header) |heading| {
-            var tmp = std.ArrayList(expression.DictionaryEntry).init(allocator);
+            var tmp = expression.ValueMap.init(allocator);
             std.debug.assert(heading.len == data.len);
             for (heading, data) |key, value| {
-                try tmp.append(.{
-                    .key = try expression.String.init(allocator, key),
-                    .value = try value.clone(allocator),
-                });
+                try tmp.put(.{ .string = key }, value);
             }
-            const t = try expression.Dictionary.init(allocator, try tmp.toOwnedSlice());
-            try out.append(t.*);
-            allocator.destroy(t);
+            try out.append(.{ .dictionary = .{ .entries = tmp } });
         } else {
-            const t = try expression.Array.init(allocator, data);
-            try out.append(t.*);
-            allocator.destroy(t);
+            try out.append(.{ .array = data });
         }
     }
-    return expression.Array.init(allocator, try out.toOwnedSlice());
+    return .{ .array = try out.toOwnedSlice() };
 }
 
-fn parse_line(line: []const u8, allocator: std.mem.Allocator) ![]expression.Expression {
+fn parse_line(line: []const u8, allocator: std.mem.Allocator) ![]expression.Value {
     const Lexer = @import("../Lexer.zig");
     if (line.len == 0) return error.LineEmpty;
     var splitter = std.mem.split(u8, line, ",");
-    var out = std.ArrayList(expression.Expression).init(allocator);
+    var out = std.ArrayList(expression.Value).init(allocator);
     while (splitter.next()) |element| {
         var lexer = Lexer.init(element);
         if (lexer.nextToken()) |token| {
             switch (token.kind) {
                 .Number => {
-                    const tmp = try parseNumber(token.chars, allocator);
-                    try out.append(tmp.*);
-                    allocator.destroy(tmp);
+                    const tmp = try parseNumber(token.chars);
+                    try out.append(tmp);
                 },
                 .String => {
-                    try out.append(.{ .string = .{ .value = token.chars } });
+                    try out.append(.{ .string = token.chars });
                 },
                 .Identifier => {
-                    try out.append(.{ .string = .{ .value = token.chars } });
+                    try out.append(.{ .string = token.chars });
                 },
                 .Boolean => {
-                    try out.append(.{ .boolean = .{ .value = std.mem.eql(u8, token.chars, "true") } });
+                    try out.append(.{ .boolean = std.mem.eql(u8, token.chars, "true") });
                 },
                 .Keyword => {
-                    try out.append(.{ .string = .{ .value = token.chars } });
+                    try out.append(.{ .string = token.chars });
                 },
                 else => unreachable,
             }
@@ -134,7 +126,7 @@ fn baseOf(digits: []const u8) u8 {
     };
 }
 
-fn parseNumber(chars: []const u8, allocator: std.mem.Allocator) !*expression.Expression {
+fn parseNumber(chars: []const u8) !expression.Value {
     const base = baseOf(chars);
 
     if (std.mem.count(u8, chars, ".") > 0) {
@@ -151,11 +143,11 @@ fn parseNumber(chars: []const u8, allocator: std.mem.Allocator) !*expression.Exp
             @floatFromInt(fraction_part.len),
         );
         const composite = @as(f64, @floatFromInt(int)) + frac;
-        return expression.Number.init(allocator, f64, composite);
+        return .{ .number = .{ .float = composite } };
     } else {
         const int_part = if (base == 10) chars else chars[2..];
         const num = try std.fmt.parseInt(i64, int_part, base);
-        return expression.Number.init(allocator, i64, num);
+        return .{ .number = .{ .integer = num } };
     }
 }
 
@@ -176,39 +168,32 @@ fn is_header(line: []const u8) bool {
     return true;
 }
 
-fn map_to_expression(allocator: std.mem.Allocator, value: std.json.Value) std.mem.Allocator.Error!*expression.Expression {
+fn map_to_expression(allocator: std.mem.Allocator, value: std.json.Value) std.mem.Allocator.Error!expression.Value {
     return switch (value) {
-        .null => b: {
-            const out = try allocator.create(expression.Expression);
-            out.* = .{ .none = null };
-            break :b out;
-        },
-        .bool => |b| expression.Boolean.init(allocator, b),
-        .float => |f| expression.Number.init(allocator, f64, f),
-        .integer => |n| expression.Number.init(allocator, i64, n),
-        .string => |s| expression.String.init(allocator, s),
+        .null => .{ .none = null },
+        .bool => |b| .{ .boolean = b },
+        .float => |f| .{ .number = .{ .float = f } },
+        .integer => |n| .{ .number = .{ .integer = n } },
+        .string => |s| .{ .string = s },
         .array => |a| b: {
-            const tmp = try allocator.alloc(expression.Expression, a.items.len);
+            const tmp = try allocator.alloc(expression.Value, a.items.len);
             for (a.items, tmp) |item, *elem| {
                 const t = try map_to_expression(allocator, item);
-                elem.* = t.*;
-                allocator.destroy(t);
+                elem.* = t;
             }
-            break :b expression.Array.init(allocator, tmp);
+            break :b .{ .array = tmp };
         },
         .object => |o| b: {
-            const tmp = try allocator.alloc(expression.DictionaryEntry, o.keys().len);
+            var tmp = expression.ValueMap.init(allocator);
             var iter = o.iterator();
-            var index: usize = 0;
             while (iter.next()) |entry| {
                 const s: []u8 = try allocator.alloc(u8, entry.key_ptr.len);
                 std.mem.copyForwards(u8, s, entry.key_ptr.*);
                 const val = try map_to_expression(allocator, entry.value_ptr.*);
-                const str = try expression.String.init(allocator, s);
-                tmp[index] = .{ .key = str, .value = val };
-                index += 1;
+                const str = .{ .string = s };
+                try tmp.put(str, val);
             }
-            break :b expression.Dictionary.init(allocator, tmp);
+            break :b .{ .dictionary = .{ .entries = tmp } };
         },
         else => unreachable,
     };

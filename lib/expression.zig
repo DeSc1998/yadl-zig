@@ -1,6 +1,12 @@
 const std = @import("std");
 const stmt = @import("statement.zig");
+const yadlValue = @import("value.zig");
 const stdlibType = @import("stdlib/type.zig");
+
+pub const Value = yadlValue.Value;
+pub const Iterator = yadlValue.Iterator;
+pub const Function = yadlValue.Function;
+pub const ValueMap = yadlValue.ValueMap;
 
 pub const ArithmeticOps = enum { Add, Sub, Mul, Div, Expo, Mod };
 pub const BooleanOps = enum { And, Or, Not };
@@ -57,111 +63,6 @@ pub const Identifier = struct {
     }
 };
 
-pub const Number = union(enum) {
-    integer: i64,
-    float: f64,
-
-    pub fn asFloat(self: Number) f64 {
-        return if (self == .float) self.float else @as(f64, @floatFromInt(self.integer));
-    }
-
-    pub fn eql(self: Number, other: Number) bool {
-        if (self == .integer and other == .integer) {
-            return self.integer == other.integer;
-        } else {
-            return self.asFloat() == other.asFloat();
-        }
-    }
-
-    pub fn add(self: Number, other: Number) Number {
-        if (self == .integer and other == .integer) {
-            return Number{ .integer = self.integer + other.integer };
-        } else {
-            return Number{ .float = self.asFloat() + other.asFloat() };
-        }
-    }
-
-    pub fn sub(self: Number, other: Number) Number {
-        if (self == .integer and other == .integer) {
-            return Number{ .integer = self.integer - other.integer };
-        } else {
-            return Number{ .float = self.asFloat() - other.asFloat() };
-        }
-    }
-
-    pub fn mul(self: Number, other: Number) Number {
-        if (self == .integer and other == .integer) {
-            return Number{ .integer = self.integer * other.integer };
-        } else {
-            return Number{ .float = self.asFloat() * other.asFloat() };
-        }
-    }
-
-    pub fn div(self: Number, other: Number) Number {
-        return Number{ .float = self.asFloat() / other.asFloat() };
-    }
-
-    pub fn expo(self: Number, other: Number) Number {
-        if (self == .integer and other == .integer and other.integer >= 0) {
-            const tmp = std.math.pow(i64, self.integer, other.integer);
-            return Number{ .integer = tmp };
-        } else {
-            const tmp = std.math.pow(f64, self.asFloat(), other.asFloat());
-            return Number{ .float = tmp };
-        }
-    }
-
-    pub fn init(alloc: std.mem.Allocator, comptime T: type, value: T) !*Expression {
-        std.debug.assert(T == f64 or T == i64);
-        const out = try alloc.create(Expression);
-        if (T == f64) {
-            out.* = .{ .number = Number{
-                .float = value,
-            } };
-        } else if (T == i64) {
-            out.* = .{ .number = Number{
-                .integer = value,
-            } };
-        } else unreachable;
-        return out;
-    }
-};
-
-pub const String = struct {
-    value: []const u8,
-
-    pub fn init(alloc: std.mem.Allocator, value: []const u8) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .string = String{
-            .value = value,
-        } };
-        return out;
-    }
-
-    pub fn initFormatted(alloc: std.mem.Allocator, value: []const u8) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .formatted_string = String{
-            .value = value,
-        } };
-        return out;
-    }
-
-    pub fn eql(self: String, other: String) bool {
-        return std.mem.eql(u8, self.value, other.value);
-    }
-};
-pub const Boolean = struct {
-    value: bool,
-
-    pub fn init(alloc: std.mem.Allocator, value: bool) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .boolean = Boolean{
-            .value = value,
-        } };
-        return out;
-    }
-};
-
 pub const FunctionCall = struct {
     func: *const Expression,
     args: []Expression,
@@ -175,54 +76,6 @@ pub const FunctionCall = struct {
         out.* = .{ .functioncall = FunctionCall{
             .args = args,
             .func = func,
-        } };
-        return out;
-    }
-};
-
-pub const Function = struct {
-    arity: Arity,
-    body: []const stmt.Statement,
-
-    pub const Arity = struct {
-        // allocator: std.mem.Allocator,
-        args: []Identifier,
-        optional_args: []Identifier = ([0]Identifier{})[0..],
-        var_args: ?Identifier = null,
-
-        pub fn init(args: []Identifier) Arity {
-            return .{ .args = args };
-        }
-
-        pub fn initVarArgs(args: []Identifier, var_args: Identifier) Arity {
-            return .{
-                .args = args,
-                .var_args = var_args,
-            };
-        }
-
-        pub fn initFull(
-            args: []Identifier,
-            options: []Identifier,
-            var_args: ?Identifier,
-        ) Arity {
-            return .{
-                .args = args,
-                .optional_args = options,
-                .var_args = var_args,
-            };
-        }
-    };
-
-    pub fn init(
-        alloc: std.mem.Allocator,
-        arity: Arity,
-        body: []const stmt.Statement,
-    ) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .function = Function{
-            .arity = arity,
-            .body = body,
         } };
         return out;
     }
@@ -291,84 +144,29 @@ pub const Dictionary = struct {
     }
 };
 
-pub const Iterator = struct {
-    next_fn: union(enum) {
-        runtime: Function,
-        builtin: stdlibType.NextFn,
-    },
-    has_next_fn: union(enum) {
-        runtime: Function,
-        builtin: stdlibType.HasNextFn,
-    },
-    peek_fn: ?union(enum) {
-        runtime: Function,
-        builtin: stdlibType.PeekFn,
-    } = null,
-    data: *Expression,
-
-    pub fn init(
-        alloc: std.mem.Allocator,
-        next_fn: Function,
-        has_next_fn: Function,
-        data: *Expression,
-    ) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .iterator = .{
-            .next_fn = .{ .runtime = next_fn },
-            .has_next_fn = .{ .runtime = has_next_fn },
-            .data = data,
-        } };
-        return out;
-    }
-
-    pub fn initBuiltin(
-        alloc: std.mem.Allocator,
-        next_fn: stdlibType.NextFn,
-        has_next_fn: stdlibType.HasNextFn,
-        peek_fn: stdlibType.PeekFn,
-        data: *Expression,
-    ) !*Expression {
-        const out = try alloc.create(Expression);
-        out.* = .{ .iterator = .{
-            .next_fn = .{ .builtin = next_fn },
-            .has_next_fn = .{ .builtin = has_next_fn },
-            .peek_fn = .{ .builtin = peek_fn },
-            .data = data,
-        } };
-        return out;
-    }
-};
+pub fn initValue(alloc: std.mem.Allocator, v: Value) !*Expression {
+    const out = try alloc.create(Expression);
+    out.* = .{ .value = v };
+    return out;
+}
 
 pub const Expression = union(enum) {
-    boolean: Boolean,
     binary_op: BinaryOp,
     unary_op: UnaryOp,
     identifier: Identifier,
-    number: Number,
-    string: String,
-    formatted_string: String,
     wrapped: *Expression,
-    none: ?*Expression,
     struct_access: StructureAccess,
     functioncall: FunctionCall,
-    function: Function,
     array: Array,
     dictionary: Dictionary,
-    iterator: Iterator,
+    value: yadlValue.Value,
 
     pub fn eql(self: Expression, other: Expression) bool {
         return switch (self) {
-            .number => |n| if (other == .number) n.eql(other.number) else false,
-            .boolean => |n| if (other == .boolean) n.value == other.boolean.value else false,
-            .string => |n| if (other == .string) n.eql(other.string) else false,
-            .dictionary => |n| if (other == .dictionary) n.eql(other.dictionary) else if (other == .none) n.entries.len == 0 else false,
-            .none => b: {
-                std.debug.assert(if (self.none) |_| false else true);
-                if (other == .dictionary) {
-                    break :b other.dictionary.entries.len == 0;
-                } else if (other == .none) {
-                    break :b true;
-                } else break :b false;
+            .value => |v| {
+                if (other == .value) {
+                    return v.eql(other.value);
+                } else return false;
             },
             else => {
                 std.debug.print("INFO: expr eql for '{s}' and '{s}'\n", .{ @tagName(self), @tagName(other) });
@@ -379,26 +177,7 @@ pub const Expression = union(enum) {
 
     pub fn clone(self: Expression, alloc: std.mem.Allocator) !*Expression {
         return switch (self) {
-            .number => |n| if (n == .integer) Number.init(alloc, i64, n.integer) else Number.init(alloc, f64, n.float),
             .identifier => |id| Identifier.init(alloc, id.name),
-            .string => |s| String.init(alloc, s.value),
-            .array => |a| b: {
-                const tmp = try alloc.alloc(Expression, a.elements.len);
-                for (a.elements, tmp) |elem, *out| {
-                    const t = try elem.clone(alloc);
-                    out.* = t.*;
-                    alloc.destroy(t);
-                }
-                break :b Array.init(alloc, tmp);
-            },
-            .dictionary => |d| b: {
-                const new_entries = try alloc.alloc(DictionaryEntry, d.entries.len);
-                for (d.entries, new_entries) |e, *new| {
-                    new.key = try e.key.clone(alloc);
-                    new.value = try e.value.clone(alloc);
-                }
-                break :b Dictionary.init(alloc, new_entries);
-            },
             .binary_op => |b| s: {
                 const tmp = try alloc.create(Expression);
                 tmp.* = .{ .binary_op = .{
@@ -416,31 +195,6 @@ pub const Expression = union(enum) {
                 } };
                 break :b tmp;
             },
-            .function => |f| b: {
-                const tmp = try alloc.create(Expression);
-                const args = try alloc.alloc(Identifier, f.arity.args.len);
-                const optionals = try alloc.alloc(Identifier, f.arity.optional_args.len);
-                const body = try alloc.alloc(@TypeOf(f.body[0]), f.body.len);
-                for (f.arity.args, args) |old, *new| {
-                    new.* = .{ .name = old.name };
-                }
-                for (f.arity.optional_args, optionals) |old, *new| {
-                    new.* = .{ .name = old.name };
-                }
-                for (f.body, body) |old, *new| {
-                    new.* = old;
-                }
-                tmp.* = .{ .function = .{
-                    .arity = Function.Arity.initFull(args, optionals, f.arity.var_args),
-                    .body = body,
-                } };
-                break :b tmp;
-            },
-            .none => b: {
-                const tmp = try alloc.create(Expression);
-                tmp.* = .{ .none = null };
-                break :b tmp;
-            },
             .struct_access => |sa| b: {
                 const st = try sa.strct.clone(alloc);
                 const key = try sa.key.clone(alloc);
@@ -456,20 +210,22 @@ pub const Expression = union(enum) {
                 }
                 break :b try FunctionCall.init(alloc, tmp, args);
             },
-            .iterator => |iter| b: {
-                const tmp = try iter.data.clone(alloc);
-                if (iter.next_fn == .builtin) {
-                    break :b try Iterator.initBuiltin(
-                        alloc,
-                        iter.next_fn.builtin,
-                        iter.has_next_fn.builtin,
-                        if (iter.peek_fn) |f| f.builtin else unreachable,
-                        tmp,
-                    );
-                } else break :b try Iterator.init(alloc, iter.next_fn.runtime, iter.has_next_fn.runtime, tmp);
-            },
-            .boolean => |b| try Boolean.init(alloc, b.value),
             .wrapped => |e| try e.clone(alloc),
+            .value => |v| b: {
+                const tmp = try alloc.create(Expression);
+                tmp.* = .{ .value = try v.clone() };
+                break :b tmp;
+            },
+            .dictionary => |dict| {
+                const entries = dict.entries;
+                const out = try alloc.alloc(DictionaryEntry, entries.len);
+                for (out, entries) |*o, entry| {
+                    o.* = .{ .key = try entry.key.clone(alloc), .value = try entry.value.clone(alloc) };
+                }
+                const tmp = try alloc.create(Expression);
+                tmp.* = .{ .dictionary = .{ .entries = out } };
+                return tmp;
+            },
             else => |v| {
                 std.debug.print("TODO: clone of {s}\n", .{@tagName(v)});
                 return error.NotImplemented;
@@ -561,14 +317,6 @@ pub fn free_local(allocator: std.mem.Allocator, expr: Expression) void {
         .functioncall => |fc| {
             free(allocator, fc.func);
             allocator.free(fc.args);
-        },
-        .function => |f| {
-            for (f.body) |st| {
-                stmt.free(allocator, st);
-            }
-            allocator.free(f.body);
-            allocator.free(f.arity.args);
-            allocator.free(f.arity.optional_args);
         },
         .array => |a| {
             allocator.free(a.elements);
