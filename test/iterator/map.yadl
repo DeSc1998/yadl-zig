@@ -9,21 +9,7 @@ square_if_even = (n) => {
     return n
 }
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': x
-}
-
-iter = map(iterator(next, has_next, d), square_if_even)
+iter = map(default_iterator(x), square_if_even)
 
 while (has_next(iter)) {
     print(next(iter))

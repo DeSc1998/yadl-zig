@@ -3,41 +3,20 @@
 lst1 = [1,2,3]
 lst2 = [2,4,6]
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-
-d1 = {
-   'index': 0,
-   'list': lst1
-}
-d2 = {
-   'index': 0,
-   'list': lst2
-}
-
 is_even = (x) => {
     return x % 2 == 0
 }
 
-print(check_all(iterator(next, has_next, d1), is_even))
-print(check_any(iterator(next, has_next, d1), is_even))
-print(check_none(iterator(next, has_next, d1), is_even))
-
-print(check_all(iterator(next, has_next, d2), is_even))
-print(check_any(iterator(next, has_next, d2), is_even))
-print(check_none(iterator(next, has_next, d2), is_even))
-
-
+print(check_all(default_iterator(lst1), is_even))
+print(check_any(default_iterator(lst1), is_even))
+print(check_none(default_iterator(lst1), is_even))
 // CHECK-OUT: false
 // CHECK-OUT: true
 // CHECK-OUT: false
+
+print(check_all(default_iterator(lst2), is_even))
+print(check_any(default_iterator(lst2), is_even))
+print(check_none(default_iterator(lst2), is_even))
 // CHECK-OUT: true
 // CHECK-OUT: true
 // CHECK-OUT: false

@@ -6,29 +6,14 @@ is_even = (x) => {
     return x % 2 == 0
 }
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': lst
-}
-d2 = {
-   'index': 0,
-   'list': lst2
-}
+iter1 = default_iterator(lst)
+iter2 = default_iterator(lst2)
 
-print(first(iterator(next, has_next, d), is_even,10))
-print(last(iterator(next, has_next, d), is_even,10))
+print(first(iter1, is_even,10))
+print(last(iter1, is_even,10))
 
-print(first(iterator(next, has_next, d2), is_even,10))
-print(last(iterator(next, has_next, d2), is_even,10))
+print(first(iter2, is_even,10))
+print(last(iter2, is_even,10))
 
 // CHECK-OUT: 0
 // CHECK-OUT: 2

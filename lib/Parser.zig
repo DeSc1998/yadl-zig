@@ -1001,7 +1001,8 @@ test "function call" {
 
 test "dictionary" {
     const input = "aoeu = { 1 : 1 }";
-    var exp: expr.Expression = .{ .number = .{ .integer = 1 } };
+    const value: expr.Value = .{ .number = .{ .integer = 1 } };
+    var exp: expr.Expression = .{ .value = value };
     var entries: [1]expr.DictionaryEntry = undefined;
     entries[0] = .{ .key = &exp, .value = &exp };
 
@@ -1027,9 +1028,9 @@ test "dictionary" {
 
 test "dictionary 3 entries" {
     const input = "aoeu = { 1 : 1, 2:2   , 3   :   3 }";
-    var exp1: expr.Expression = .{ .number = .{ .integer = 1 } };
-    var exp2: expr.Expression = .{ .number = .{ .integer = 2 } };
-    var exp3: expr.Expression = .{ .number = .{ .integer = 3 } };
+    var exp1: expr.Value = .{ .number = .{ .integer = 1 } };
+    var exp2: expr.Value = .{ .number = .{ .integer = 2 } };
+    var exp3: expr.Value = .{ .number = .{ .integer = 3 } };
     var entries: [3]expr.DictionaryEntry = undefined;
     entries[0] = .{ .key = &exp1, .value = &exp1 };
     entries[1] = .{ .key = &exp2, .value = &exp2 };
@@ -1081,8 +1082,8 @@ test "assign after array" {
         \\aoeu = [ 1, 2 ]
     ;
     // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Expression{ .number = .{ .integer = 1 } };
-    var elements: [4]expr.Expression = undefined;
+    var tmp = expr.Value{ .number = .{ .integer = 1 } };
+    var elements: [4]expr.Value = undefined;
     elements[0] = tmp;
     tmp.number.integer = 2;
     elements[1] = tmp;
@@ -1107,8 +1108,8 @@ test "assign after array" {
     try std.testing.expect(result_stmt_2.assignment.value.* == .array);
     const result_arr_1 = result_stmt_1.assignment.value.array;
     const result_arr_2 = result_stmt_2.assignment.value.array;
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_1.elements);
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_2.elements);
+    try std.testing.expectEqualSlices(expr.Value, elements[0..], result_arr_1.elements);
+    try std.testing.expectEqualSlices(expr.Value, elements[0..], result_arr_2.elements);
 }
 
 test "comment" {
@@ -1118,8 +1119,8 @@ test "comment" {
         \\aoeu = [ 1, 2,   3 ,4 ]
     ;
     // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Expression{ .number = .{ .integer = 1 } };
-    var elements: [4]expr.Expression = undefined;
+    var tmp = expr.Value{ .number = .{ .integer = 1 } };
+    var elements: [4]expr.Value = undefined;
     elements[0] = tmp;
     tmp.number.integer = 2;
     elements[1] = tmp;
@@ -1155,8 +1156,8 @@ test "newline + assign after array" {
         \\aoeu = [ 1, 2 ]
     ;
     // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Expression{ .number = .{ .integer = 1 } };
-    var elements: [2]expr.Expression = undefined;
+    var tmp = expr.Value{ .number = .{ .integer = 1 } };
+    var elements: [2]expr.Value = undefined;
     elements[0] = tmp;
     tmp.number.integer = 2;
     elements[1] = tmp;

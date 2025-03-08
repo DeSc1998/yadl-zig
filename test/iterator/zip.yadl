@@ -4,31 +4,10 @@ lst1 = [1,2,3]
 lst2 = [11,22,33]
 lst3 = [1,2]
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d1 = {
-   'index': 0,
-   'list': lst1
-}
-d2 = {
-   'index': 0,
-   'list': lst2
-}
-d3 = {
-   'index': 0,
-   'list': lst3
-}
-iter = iterator(next, has_next, d1)
-iter1 = iterator(next, has_next, d1)
-iter2 = iterator(next, has_next, d2)
-iter3 = iterator(next, has_next, d3)
+iter = default_iterator(lst1)
+iter1 = default_iterator(lst1)
+iter2 = default_iterator(lst2)
+iter3 = default_iterator(lst3)
 
 out_iter1 = zip(iter,iter2)
 out_iter2 = zip(iter1,iter3)
@@ -36,13 +15,12 @@ out_iter2 = zip(iter1,iter3)
 while (has_next(out_iter1)) {
     print(next(out_iter1))
 }
-
-while (has_next(out_iter2)) {
-    print(next(out_iter2))
-}
 // CHECK-OUT: [1, 11]
 // CHECK-OUT: [2, 22]
 // CHECK-OUT: [3, 33]
 
+while (has_next(out_iter2)) {
+    print(next(out_iter2))
+}
 // CHECK-OUT: [1, 1]
 // CHECK-OUT: [2, 2]

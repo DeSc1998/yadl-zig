@@ -15,6 +15,14 @@ const Statement = statement.Statement;
 
 pub const Error = @import("type.zig").Error;
 
+const IterIndex = enum {
+    ITERATOR,
+    FN,
+    EXTRA,
+    COUNT,
+};
+const iterator_data_size: usize = @intFromEnum(.COUNT);
+
 fn exec_runtime_function(func: expression.Function, call_args: []Value, scope: *Scope) Error!void {
     const match = @import("../stdlib.zig").match_runtime_call_args(call_args, func.arity) catch return Error.ArityMismatch;
     var local_scope = try Scope.fromCallMatch(scope.allocator, scope.out, scope, func.arity, match);
@@ -155,6 +163,7 @@ pub fn map(args: libtype.CallMatch, scope: *Scope) Error!void {
             tmp[MAP_DATA_INDEX] = elements;
             tmp[MAP_FN_INDEX] = callable;
             const out = expression.Iterator.initBuiltin(
+                scope.allocator,
                 &map_next,
                 &map_has_next,
                 &map_peek,
@@ -290,6 +299,7 @@ pub fn flatten(args: libtype.CallMatch, scope: *Scope) Error!void {
             tmp[FLATTEN_DATA_INDEX] = lists;
             tmp[FLATTEN_INTERMEDIATE_INDEX] = .{ .none = null };
             scope.return_result = expression.Iterator.initBuiltin(
+                scope.allocator,
                 &flatten_next,
                 &flatten_has_next,
                 &flatten_peek,
@@ -378,8 +388,8 @@ pub fn reduce(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
-const GROUP_BY_FN_INDEX = 1;
 const GROUP_BY_DATA_INDEX = 0;
+const GROUP_BY_FN_INDEX = 1;
 const GROUP_BY_SEEN_INDEX = 2;
 const GROUP_BY_TEMP_INDEX = 3;
 fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
@@ -546,22 +556,13 @@ pub fn group_by(args: libtype.CallMatch, scope: *Scope) Error!void {
     switch (elements) {
         .array => |a| {
             var out_map = ValueMap.init(scope.allocator);
-            // TODO: hard coded slice size. May overfilled by 'callable' if it returns large arrays/dictionaries
-            var buffer: [2048]u8 = undefined;
-            var fixedStream = std.io.fixedBufferStream(&buffer);
-            const writer = fixedStream.writer().any();
             for (a) |elem| {
-                fixedStream.reset();
                 const call_args = try scope.allocator.alloc(Value, 1);
                 defer scope.allocator.free(call_args);
                 call_args[0] = elem;
                 try exec_runtime_function(callable.function, call_args, scope);
                 const result = scope.result() orelse return Error.ValueNotFound;
-                var out_scope = Scope.empty(scope.allocator, writer);
-                // NOTE: praying that only simple values are printed
-                try printValue(result, &out_scope);
-                const written = .{ .string = try scope.allocator.dupe(u8, fixedStream.getWritten()) };
-                if (out_map.getPtr(written)) |value| {
+                if (out_map.getPtr(result)) |value| {
                     const tmp = value.array;
                     const new = try scope.allocator.alloc(Value, tmp.len + 1);
                     @memcpy(new[0..tmp.len], tmp);
@@ -571,7 +572,7 @@ pub fn group_by(args: libtype.CallMatch, scope: *Scope) Error!void {
                 } else {
                     const new = try scope.allocator.alloc(Value, 1);
                     new[0] = elem;
-                    try out_map.put(written, .{ .array = new });
+                    try out_map.put(result, .{ .array = new });
                 }
             }
 
@@ -583,6 +584,7 @@ pub fn group_by(args: libtype.CallMatch, scope: *Scope) Error!void {
             tmp[GROUP_BY_FN_INDEX] = callable;
             tmp[GROUP_BY_SEEN_INDEX] = .{ .array = &[0]Value{} };
             scope.return_result = expression.Iterator.initBuiltin(
+                scope.allocator,
                 &group_by_next,
                 &group_by_has_next,
                 &group_by_peek,
@@ -869,6 +871,7 @@ pub fn filter(args: libtype.CallMatch, scope: *Scope) Error!void {
             tmp[FILTER_DATA_INDEX] = elements;
             tmp[FILTER_FN_INDEX] = callable;
             scope.return_result = expression.Iterator.initBuiltin(
+                scope.allocator,
                 &filter_next,
                 &filter_has_next,
                 &filter_peek,
@@ -934,10 +937,11 @@ pub fn zip(args: libtype.CallMatch, scope: *Scope) Error!void {
 
     if (left_elements == .iterator and right_elements == .iterator) {
         scope.return_result = expression.Iterator.initBuiltin(
+            scope.allocator,
             &zip_next,
             &zip_has_next,
             &zip_peek,
-            args.unnamed_args,
+            try scope.allocator.dupe(Value, args.unnamed_args),
         );
         return;
     }
@@ -1394,6 +1398,7 @@ pub fn default_iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
             tmp[DEFAULT_DATA_INDEX] = args.unnamed_args[0];
             tmp[DEFAULT_INDEX] = .{ .number = .{ .integer = 0 } };
             scope.return_result = expression.Iterator.initBuiltin(
+                scope.allocator,
                 &default_next,
                 &default_has_next,
                 &default_peek,
@@ -1428,10 +1433,11 @@ pub fn iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 
     scope.return_result = expression.Iterator.init(
+        scope.allocator,
         next_fn.function,
         has_next_fn.function,
         null,
-        args.unnamed_args[2..3],
+        try scope.allocator.dupe(Value, args.unnamed_args[2..3]),
     );
 }
 

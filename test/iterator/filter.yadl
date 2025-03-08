@@ -1,22 +1,8 @@
 // RUN: DEFAULT
 x = [1,2,3,4]
 odd = (n) => n % 2 == 1
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
 
-d = {
-   'index': 0,
-   'list': x
-}
-
-iter = filter(iterator(next, has_next, d), odd)
+iter = filter(default_iterator(x), odd)
 
 while (has_next(iter)) {
     print(next(iter))

@@ -179,6 +179,7 @@ pub const Dictionary = struct {
 };
 
 pub const Iterator = struct {
+    allocator: std.mem.Allocator,
     next_fn: union(enum) {
         runtime: Function,
         builtin: stdlibType.NextFn,
@@ -194,12 +195,14 @@ pub const Iterator = struct {
     data: []Value,
 
     pub fn init(
+        alloc: std.mem.Allocator,
         next_fn: Function,
         has_next_fn: Function,
         peek_fn: ?Function,
         data: []Value,
     ) Value {
         return .{ .iterator = .{
+            .allocator = alloc,
             .next_fn = .{ .runtime = next_fn },
             .has_next_fn = .{ .runtime = has_next_fn },
             .peek_fn = if (peek_fn) |f| .{ .runtime = f } else null,
@@ -208,12 +211,14 @@ pub const Iterator = struct {
     }
 
     pub fn initBuiltin(
+        alloc: std.mem.Allocator,
         next_fn: stdlibType.NextFn,
         has_next_fn: stdlibType.HasNextFn,
         peek_fn: stdlibType.PeekFn,
         data: []Value,
     ) Value {
         return .{ .iterator = .{
+            .allocator = alloc,
             .next_fn = .{ .builtin = next_fn },
             .has_next_fn = .{ .builtin = has_next_fn },
             .peek_fn = .{ .builtin = peek_fn },
@@ -270,6 +275,19 @@ pub const Value = union(enum) {
             .dictionary => |d| {
                 return .{ .dictionary = .{
                     .entries = try d.entries.clone(),
+                } };
+            },
+            .iterator => |iter| {
+                const tmp = try iter.allocator.alloc(Value, iter.data.len);
+                for (tmp, iter.data) |*out, in| {
+                    out.* = try in.clone();
+                }
+                return .{ .iterator = .{
+                    .allocator = iter.allocator,
+                    .next_fn = iter.next_fn,
+                    .has_next_fn = iter.has_next_fn,
+                    .peek_fn = iter.peek_fn,
+                    .data = tmp,
                 } };
             },
             else => return self,

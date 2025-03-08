@@ -8,25 +8,10 @@ is1 = (x) => {
     return x == 1
 }
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-
-d = {
-   'index': 0,
-   'list': lst
-}
-
-iter = iterator(next, has_next, d)
+iter = default_iterator(lst)
 print(count(iter, is_even))
 print(count(iter, is_even))
-print(count(iterator(next, has_next, d), is1))
+print(count(iter, is1))
 
 // CHECK-OUT: 2
 // CHECK-OUT: 2

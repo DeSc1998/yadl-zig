@@ -1,7 +1,6 @@
 // RUN: DEFAULT
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 is_even = (n) => n % 2 == 0
-
 iter = group_by(default_iterator(numbers), is_even)
 
 while (has_next(iter)) {

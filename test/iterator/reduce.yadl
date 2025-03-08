@@ -1,21 +1,6 @@
 // RUN: DEFAULT
 numbers = [1, 2, 3, 4, 5]
 sum = (acc, n) => acc + n
-
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': numbers
-}
-
-print(reduce(iterator(next, has_next, d), sum))
+print(reduce(default_iterator(numbers), sum))
 
 // CHECK-OUT: 15

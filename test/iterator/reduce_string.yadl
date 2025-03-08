@@ -1,21 +1,6 @@
 // RUN: DEFAULT
 words = ["Hello", " ", "World", "!"]
 concat = (acc, str) => acc + str
-
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': words
-}
-
-print(reduce(iterator(next, has_next, d), concat))
+print(reduce(default_iterator(words), concat))
 
 // CHECK-OUT: Hello World!

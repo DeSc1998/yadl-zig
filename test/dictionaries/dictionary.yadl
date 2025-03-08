@@ -11,6 +11,7 @@ d4 = {}
 print(d)
 print( d[1], d[2], d[3], d[4])
 print(d4)
-// CHECK-OUT: {1: 1, 2: 2, 3: 3, 4: 4}
+// NOTE: due to internal definition output order may not be the same as declaration order
+// CHECK-OUT: {3: 3, 1: 1, 4: 4, 2: 2}
 // CHECK-OUT: 1 2 3 4
 // CHECK-OUT: {}

@@ -6,4 +6,4 @@ values = load("test-data/header.csv", "csv")
 
 print(values)
 
-// CHECK-OUT: [{count: 15, name: aoeu, is stable: true}, {count: 69, name: snth, is stable: false}]
+// CHECK-OUT: [{is stable: true, count: 15, name: aoeu}, {is stable: false, count: 69, name: snth}]

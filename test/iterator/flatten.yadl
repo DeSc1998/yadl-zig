@@ -1,23 +1,9 @@
 // RUN: DEFAULT
 x = [[1, 2], [3, 4], [5]]
 
-next = (data) => {
-    if (data['index'] < len(data['list'])) {
-        data['index'] = data['index'] + 1
-        return data['list'][ data['index'] - 1 ]
-    } else {
-        return none
-    }
-}
-has_next = (data) => data['index'] < len(data['list'])
-d = {
-   'index': 0,
-   'list': x
-}
-
 print(x)
 // CHECK-OUT: [[1, 2], [3, 4], [5]]
-iter = flatten( iterator(next, has_next, d) )
+iter = flatten( default_iterator(x) )
 
 while (has_next(iter)) {
     print(next(iter))
