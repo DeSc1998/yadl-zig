@@ -1551,7 +1551,7 @@ pub fn save_data(args: libtype.CallMatch, scope: *Scope) Error!void {
     } else return Error.FormatNotSupportted;
 }
 
-fn save_as_json(writer: std.io.AnyWriter, expr: Value) !void {
+pub fn save_as_json(writer: std.io.AnyWriter, expr: Value) !void {
     _ = switch (expr) {
         .none => try writer.write("null"),
         .number => |n| {
@@ -1563,19 +1563,19 @@ fn save_as_json(writer: std.io.AnyWriter, expr: Value) !void {
         .boolean => |value| try writer.print("{}", .{value}),
         .string => |value| try writer.print("\"{s}\"", .{value}),
         .dictionary => |dict| {
-            _ = try writer.write("{\n");
+            _ = try writer.write("{");
             var has_written = false;
             var iter = dict.entries.iterator();
             while (iter.next()) |entry| {
                 if (has_written) {
-                    _ = try writer.write(",\n");
+                    _ = try writer.write(", ");
                 } else has_written = true;
                 try save_as_json(writer, entry.key_ptr.*);
                 _ = try writer.write(": ");
                 try save_as_json(writer, entry.value_ptr.*);
             }
-            _ = try writer.write("\n");
-            _ = try writer.write("}\n");
+            _ = try writer.write("");
+            _ = try writer.write("}");
         },
         .array => |array| {
             _ = try writer.write("[");

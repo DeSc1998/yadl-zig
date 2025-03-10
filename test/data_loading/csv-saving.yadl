@@ -8,4 +8,4 @@ bern_data = d["bern"]
 
 save(bern_data, "test-save-csv", "csv")
 
-// CHECK-OUT: {bern: [{day: 3, temp: 4.6}, {day: 4, temp: 5.7}, {day: 9, temp: 8.5}, {day: 15, temp: -0.5}]}
+// CHECK-OUT: {bern: [{temp: 4.6, day: 3}, {temp: 5.7, day: 4}, {temp: 8.5, day: 9}, {temp: -0.5, day: 15}]}

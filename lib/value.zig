@@ -131,22 +131,12 @@ const ValueContext = struct {
     const Self = @This();
     const funcs = @import("stdlib/functions.zig");
     const Scope = @import("Scope.zig");
-    const CallMatch = @import("stdlib/type.zig").CallMatch;
-    const OptionalArg = @import("stdlib/type.zig").OptionalArg;
     pub fn hash(self: Self, key: Value) u64 {
         _ = self;
         var buffer: [2048]u8 = undefined;
         var fixed_stream = std.io.fixedBufferStream(&buffer);
         const writer = fixed_stream.writer().any();
-        var alloc = std.heap.GeneralPurposeAllocator(.{}){};
-        var scope = Scope.empty(alloc.allocator(), writer);
-        var tmp: [1]Value = [1]Value{key};
-        const args: CallMatch = .{
-            .unnamed_args = &[0]Value{},
-            .optional_args = &[0]OptionalArg{},
-            .var_args = &tmp,
-        };
-        funcs.print(args, &scope) catch {};
+        funcs.save_as_json(writer, key) catch {};
         const used = fixed_stream.getWritten();
         return std.hash_map.hashString(used);
     }

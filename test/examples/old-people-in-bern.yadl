@@ -14,4 +14,4 @@ old_people_in_bern = filter(jessy_moved_to_bern, (user) => (user["city"] == "Ber
 
 print(old_people_in_bern)
 
-// CHECK-OUT: [{id: 1, age: 78, name: Jane, city: Bern}]
+// CHECK-OUT: [{city: Bern, age: 78, name: Jane, id: 1}]

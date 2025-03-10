@@ -4,4 +4,4 @@ x = [1,2   ,"3"]
 
 print({'a': 'b', 'c'  :x})
 
-// CHECK-OUT: {c: [1, 2, 3], a: b}
+// CHECK-OUT: {a: b, c: [1, 2, 3]}
