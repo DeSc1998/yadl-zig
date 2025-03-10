@@ -161,20 +161,19 @@ const ValueContext = struct {
 pub const ValueMap = std.HashMap(Value, Value, ValueContext, 80);
 
 pub const Dictionary = struct {
-    entries: ValueMap,
+    allocator: std.mem.Allocator,
+    entries: *ValueMap,
 
-    pub fn init(entries: ValueMap) Value {
-        return .{ .entries = entries };
+    pub fn init(entries: ValueMap) !Value {
+        const tmp = try entries.allocator.create(ValueMap);
+        tmp.* = entries;
+        return .{ .dictionary = .{ .allocator = entries.allocator, .entries = tmp } };
     }
 
     pub fn empty(alloc: std.mem.Allocator) !Value {
-        return .{ .entries = ValueMap.init(alloc) };
-    }
-
-    fn eql(self: Dictionary, other: Dictionary) bool {
-        _ = self;
-        _ = other;
-        return false;
+        const tmp = try alloc.create(ValueMap);
+        tmp.* = ValueMap.init(alloc);
+        return .{ .dictionary = .{ .allocator = alloc, .entries = tmp } };
     }
 };
 
@@ -273,14 +272,31 @@ pub const Value = union(enum) {
     pub fn clone(self: Value) !Value {
         switch (self) {
             .dictionary => |d| {
-                return .{ .dictionary = .{
-                    .entries = try d.entries.clone(),
-                } };
+                return Dictionary.init(try d.entries.clone());
             },
             .iterator => |iter| {
                 const tmp = try iter.allocator.alloc(Value, iter.data.len);
                 for (tmp, iter.data) |*out, in| {
                     out.* = try in.clone();
+                }
+                return .{ .iterator = .{
+                    .allocator = iter.allocator,
+                    .next_fn = iter.next_fn,
+                    .has_next_fn = iter.has_next_fn,
+                    .peek_fn = iter.peek_fn,
+                    .data = tmp,
+                } };
+            },
+            else => return self,
+        }
+    }
+
+    pub fn iter_clone(self: Value) !Value {
+        switch (self) {
+            .iterator => |iter| {
+                const tmp = try iter.allocator.alloc(Value, iter.data.len);
+                for (tmp, iter.data) |*out, in| {
+                    out.* = try in.iter_clone();
                 }
                 return .{ .iterator = .{
                     .allocator = iter.allocator,

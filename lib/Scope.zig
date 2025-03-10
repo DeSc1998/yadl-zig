@@ -82,7 +82,7 @@ pub fn hasResult(self: Scope) bool {
 
 pub fn result(self: *Scope) ?expr.Value {
     if (self.return_result) |res| {
-        self.return_result = null;
+        defer self.return_result = null;
         return res;
     } else return null;
 }

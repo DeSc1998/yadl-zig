@@ -1,6 +1,6 @@
 const std = @import("std");
 const stmt = @import("statement.zig");
-const yadlValue = @import("value.zig");
+pub const yadlValue = @import("value.zig");
 const stdlibType = @import("stdlib/type.zig");
 
 pub const Value = yadlValue.Value;

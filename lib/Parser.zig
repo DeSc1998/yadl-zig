@@ -1082,8 +1082,8 @@ test "assign after array" {
         \\aoeu = [ 1, 2 ]
     ;
     // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Value{ .number = .{ .integer = 1 } };
-    var elements: [4]expr.Value = undefined;
+    var tmp = expr.Expression{ .value = .{ .number = .{ .integer = 1 } } };
+    var elements: [4]expr.Expression = undefined;
     elements[0] = tmp;
     tmp.number.integer = 2;
     elements[1] = tmp;
@@ -1119,14 +1119,14 @@ test "comment" {
         \\aoeu = [ 1, 2,   3 ,4 ]
     ;
     // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Value{ .number = .{ .integer = 1 } };
-    var elements: [4]expr.Value = undefined;
+    var tmp = expr.Expression{ .value = .{ .number = .{ .integer = 1 } } };
+    var elements: [4]expr.Expression = undefined;
     elements[0] = tmp;
-    tmp.number.integer = 2;
+    tmp.value.number.integer = 2;
     elements[1] = tmp;
-    tmp.number.integer = 3;
+    tmp.value.number.integer = 3;
     elements[2] = tmp;
-    tmp.number.integer = 4;
+    tmp.value.number.integer = 4;
     elements[3] = tmp;
 
     var parser = Self.init(input, std.testing.allocator);

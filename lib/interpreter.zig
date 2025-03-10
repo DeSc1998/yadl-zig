@@ -82,7 +82,7 @@ fn modify(strct: *Expression, value: *Expression, scope: *Scope) Error!void {
     try evalExpression(value, scope);
     const ex = scope.result() orelse unreachable;
     try evalExpression(strct.struct_access.strct, scope);
-    var contianer = scope.result() orelse unreachable;
+    const contianer = scope.result() orelse unreachable;
     try evalExpression(strct.struct_access.key, scope);
     const key = scope.result() orelse unreachable;
 
@@ -95,7 +95,7 @@ fn modify(strct: *Expression, value: *Expression, scope: *Scope) Error!void {
             const index = @as(usize, @intCast(key.number.integer));
             a[index] = ex;
         },
-        .dictionary => |*d| {
+        .dictionary => |d| {
             try d.entries.put(key, ex);
         },
         else => |v| {
@@ -128,8 +128,7 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
 
     for (fc.args, tmpArgs) |*arg, *tmparg| {
         try evalExpression(arg, scope);
-        const tmp = scope.result() orelse unreachable;
-        tmparg.* = tmp;
+        tmparg.* = scope.result() orelse unreachable;
     }
 
     switch (fc.func.*) {
@@ -183,8 +182,8 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
             scope.return_result = result;
         },
         else => |e| {
-            std.debug.print("ERROR: unhandled expression case in function call: {s}\n", .{@tagName(e)});
-            return Error.NotImplemented;
+            std.debug.print("ERROR: unexpected expression in function call: {s}\n", .{@tagName(e)});
+            return Error.InvalidExpressoinType;
         },
     }
 }
@@ -221,6 +220,10 @@ fn evalStructAccess(strct: *Expression, key: *Expression, scope: *Scope) Error!v
                 },
                 .dictionary => |dict| {
                     scope.return_result = dict.entries.get(k) orelse .{ .none = null };
+                    // scope.return_result = dict.entries.get(k) orelse b: {
+                    //     std.log.err("accessing index '{}' in dict found no element", .{k});
+                    //     break :b .{ .none = null };
+                    // };
                 },
                 else => |value| {
                     std.log.err("value can not be accessed: {s}", .{@tagName(value)});
@@ -278,11 +281,10 @@ pub fn evalExpression(value: *Expression, scope: *Scope) Error!void {
             } else scope.return_result = v;
         },
         .identifier => |id| {
-            const v = scope.lookup(id) orelse {
+            scope.return_result = scope.lookup(id) orelse {
                 std.debug.print("ERROR: no value found for '{s}'\n", .{id.name});
                 return Error.ValueNotFound;
             };
-            scope.return_result = v;
         },
         .binary_op => |bin| try evalBinaryOp(bin.op, bin.left, bin.right, scope),
         .unary_op => |un| try evalUnaryOp(un.op, un.operant, scope),
@@ -303,15 +305,15 @@ pub fn evalExpression(value: *Expression, scope: *Scope) Error!void {
             scope.return_result = .{ .array = tmp };
         },
         .dictionary => |d| {
-            var tmp = expr.ValueMap.init(scope.allocator);
+            var tmp = try expr.yadlValue.Dictionary.empty(scope.allocator);
             for (d.entries) |entry| {
                 try evalExpression(entry.key, scope);
                 const out_key = scope.result() orelse unreachable;
                 try evalExpression(entry.value, scope);
                 const out_value = scope.result() orelse unreachable;
-                try tmp.put(out_key, out_value);
+                try tmp.dictionary.entries.put(out_key, out_value);
             }
-            scope.return_result = .{ .dictionary = .{ .entries = tmp } };
+            scope.return_result = tmp;
         },
     }
 }

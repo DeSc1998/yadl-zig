@@ -70,7 +70,7 @@ pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !expression.Valu
             for (heading, data) |key, value| {
                 try tmp.put(.{ .string = key }, value);
             }
-            try out.append(.{ .dictionary = .{ .entries = tmp } });
+            try out.append(try expression.yadlValue.Dictionary.init(tmp));
         } else {
             try out.append(.{ .array = data });
         }
@@ -193,7 +193,7 @@ fn map_to_expression(allocator: std.mem.Allocator, value: std.json.Value) std.me
                 const str = .{ .string = s };
                 try tmp.put(str, val);
             }
-            break :b .{ .dictionary = .{ .entries = tmp } };
+            break :b try expression.yadlValue.Dictionary.init(tmp);
         },
         else => unreachable,
     };

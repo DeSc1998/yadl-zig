@@ -1,26 +1,27 @@
 // RUN: DEFAULT
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-is_even = (n) => n % 2 == 0
+is_even = (n) => n % 3
 iter = group_by(default_iterator(numbers), is_even)
 
 while (has_next(iter)) {
     tmp = next(iter)
     print( 'key:', tmp['key'] )
-    values = tmp['values']
+    values = tmp['value']
     while (has_next(values)) {
         print(next(values))
     }
 }
 
-// CHECK-OUT: key: false
+// CHECK-OUT: key: 1
 // CHECK-OUT: 1
-// CHECK-OUT: 3
-// CHECK-OUT: 5
-// CHECK-OUT: 7
-// CHECK-OUT: 9
-// CHECK-OUT: key: true
-// CHECK-OUT: 2
 // CHECK-OUT: 4
-// CHECK-OUT: 6
-// CHECK-OUT: 8
+// CHECK-OUT: 7
 // CHECK-OUT: 10
+// CHECK-OUT: key: 2
+// CHECK-OUT: 2
+// CHECK-OUT: 5
+// CHECK-OUT: 8
+// CHECK-OUT: key: 0
+// CHECK-OUT: 3
+// CHECK-OUT: 6
+// CHECK-OUT: 9

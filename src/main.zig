@@ -35,18 +35,14 @@ pub fn main() !void {
         };
 
         var parser = Parser.init(input, allocator);
-
         const stmts = try parser.parse();
-
         var scope = Scope.empty(allocator, stdout.any());
-        // std.debug.print("INFO: memory usage (byte): {}\n", .{arena.queryCapacity()});
 
         for (stmts) |st| {
             interpreter.evalStatement(st, &scope) catch |err| {
                 try bw.flush();
                 return err;
             };
-            // std.debug.print("INFO: memory usage (byte): {\n", .{arena.queryCapacity()});
         }
         try bw.flush();
 

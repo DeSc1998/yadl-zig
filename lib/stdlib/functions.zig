@@ -431,7 +431,7 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
         scope,
     );
     const filter_tmp = try scope.allocator.alloc(Value, 2);
-    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone();
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     filter_tmp[0] = tmp_iter;
     filter_tmp[1] = filter_fn;
     try filter(libtype.CallMatch.init(filter_tmp, null, null), scope);
@@ -445,23 +445,23 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
         libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null, null),
         scope,
     );
-    scope.return_result = .{ .dictionary = .{ .entries = entries } };
+    scope.return_result = try expression.yadlValue.Dictionary.init(entries);
 }
 
 fn equal_to_key(groupper: Value, key: Value, scope: *Scope) !expression.Value {
     const tmp = try expression.Identifier.init(scope.allocator, "tmp");
     const id = try expression.Identifier.init(scope.allocator, "x");
-    var tmp_key: Expression = .{ .value = key };
-    const tmp_group: Expression = .{ .value = groupper };
+    const tmp_key: *Expression = try expression.initValue(scope.allocator, key);
+    const tmp_group: *Expression = try expression.initValue(scope.allocator, groupper);
     const bin = try expression.BinaryOp.init(
         scope.allocator,
         .{ .compare = .Equal },
-        &tmp_key,
+        tmp_key,
         tmp,
     );
     const fn_call = try expression.FunctionCall.init(
         scope.allocator,
-        &tmp_group,
+        tmp_group,
         id[0..1],
     );
     const args = try scope.allocator.alloc(expression.Identifier, 1);
@@ -494,7 +494,7 @@ fn group_by_peek(data_expr: []Value, scope: *Scope) Error!void {
         scope,
     );
     const filter_tmp = try scope.allocator.alloc(Value, 2);
-    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone();
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     filter_tmp[0] = tmp_iter;
     filter_tmp[1] = filter_fn;
     try filter(libtype.CallMatch.init(filter_tmp, null, null), scope);
@@ -502,14 +502,14 @@ fn group_by_peek(data_expr: []Value, scope: *Scope) Error!void {
     var entries = ValueMap.init(scope.allocator);
     try entries.put(.{ .string = "key" }, try elements[GROUP_BY_TEMP_INDEX].clone());
     try entries.put(.{ .string = "value" }, filter_iter);
-    scope.return_result = .{ .dictionary = .{ .entries = entries } };
+    scope.return_result = try expression.yadlValue.Dictionary.init(entries);
 }
 
 fn group_by_has_next(data_expr: []Value, scope: *Scope) Error!void {
     const elements = data_expr;
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
-    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].clone();
+    const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     var tmp_args: [1]Value = .{tmp_iter};
     try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
     var result = scope.result() orelse unreachable;
@@ -576,7 +576,7 @@ pub fn group_by(args: libtype.CallMatch, scope: *Scope) Error!void {
                 }
             }
 
-            scope.return_result = .{ .dictionary = .{ .entries = out_map } };
+            scope.return_result = try expression.yadlValue.Dictionary.init(out_map);
         },
         .iterator => {
             const tmp = try scope.allocator.alloc(Value, 4);
@@ -736,31 +736,31 @@ fn filter_next(data_expr: []Value, scope: *Scope) Error!void {
     const elements = data_expr;
     std.debug.assert(elements[FILTER_FN_INDEX] == .function);
     std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
-    const iter = elements[FILTER_DATA_INDEX];
-    var tmp_args: [1]Value = .{iter};
+    var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
+    var tmp_args: [1]Value = undefined;
     const func = elements[FILTER_FN_INDEX].function;
-    try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
     var result = scope.result() orelse unreachable;
     if (!result.boolean) {
         scope.return_result = result;
         return;
     }
 
-    try iter_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+    iter = .{elements[FILTER_DATA_INDEX]};
+    try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
     var out = scope.result() orelse unreachable;
     tmp_args = .{out};
     try exec_runtime_function(func, &tmp_args, scope);
     result = scope.result() orelse unreachable;
     while (result == .boolean and !result.boolean) {
-        tmp_args = .{iter};
-        try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+        try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
         result = scope.result() orelse unreachable;
         if (!result.boolean) {
             scope.return_result = .{ .none = null };
             return;
         }
 
-        try iter_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+        try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
         out = scope.result() orelse unreachable;
         tmp_args = .{out};
         try exec_runtime_function(func, &tmp_args, scope);
@@ -773,7 +773,7 @@ fn filter_peek(data_expr: []Value, scope: *Scope) Error!void {
     const elements = data_expr;
     std.debug.assert(elements[FILTER_FN_INDEX] == .function);
     std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
-    var iter: [1]Value = .{elements[FILTER_DATA_INDEX]};
+    var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
     var tmp_args: [1]Value = iter;
     const func = elements[FILTER_FN_INDEX].function;
     try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
@@ -783,7 +783,7 @@ fn filter_peek(data_expr: []Value, scope: *Scope) Error!void {
         return;
     }
 
-    try iter_peek(libtype.CallMatch.init(&tmp_args, null, null), scope);
+    try iter_peek(libtype.CallMatch.init(&iter, null, null), scope);
     tmp_args = .{scope.result() orelse unreachable};
     try exec_runtime_function(func, &tmp_args, scope);
     result = scope.result() orelse unreachable;
@@ -808,7 +808,7 @@ fn filter_has_next(data_expr: []Value, scope: *Scope) Error!void {
     const elements = data_expr;
     std.debug.assert(elements[FILTER_FN_INDEX] == .function);
     std.debug.assert(elements[FILTER_DATA_INDEX] == .iterator);
-    var iter: [1]Value = .{elements[FILTER_DATA_INDEX]};
+    var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
     var tmp_args: [1]Value = undefined;
     const func = elements[FILTER_FN_INDEX].function;
     try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
@@ -1442,12 +1442,11 @@ pub fn iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
 }
 
 pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
-    const iter = args.unnamed_args[0];
-    std.debug.assert(iter == .iterator);
-
-    switch (iter.iterator.next_fn) {
+    std.debug.assert(args.unnamed_args[0] == .iterator);
+    const iter = args.unnamed_args[0].iterator;
+    switch (iter.next_fn) {
         .runtime => |f| {
-            try exec_runtime_function(f, iter.iterator.data, scope);
+            try exec_runtime_function(f, iter.data, scope);
             if (scope.result()) |res| {
                 scope.return_result = res;
             } else {
@@ -1455,22 +1454,21 @@ pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
             }
         },
         .builtin => |f| {
-            try f(iter.iterator.data, scope);
+            try f(iter.data, scope);
         },
     }
 }
 
 pub fn iter_peek(args: libtype.CallMatch, scope: *Scope) Error!void {
-    const iter = args.unnamed_args[0];
-    std.debug.assert(iter == .iterator);
-
-    if (iter.iterator.peek_fn) |func| {
+    std.debug.assert(args.unnamed_args[0] == .iterator);
+    const iter = args.unnamed_args[0].iterator;
+    if (iter.peek_fn) |func| {
         switch (func) {
             .runtime => |f| {
-                try exec_runtime_function(f, iter.iterator.data, scope);
+                try exec_runtime_function(f, iter.data, scope);
             },
             .builtin => |f| {
-                try f(iter.iterator.data, scope);
+                try f(iter.data, scope);
             },
         }
     } else {
@@ -1479,12 +1477,11 @@ pub fn iter_peek(args: libtype.CallMatch, scope: *Scope) Error!void {
 }
 
 pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
-    const iter = args.unnamed_args[0];
-    std.debug.assert(iter == .iterator);
-
-    switch (iter.iterator.has_next_fn) {
+    std.debug.assert(args.unnamed_args[0] == .iterator);
+    const iter = args.unnamed_args[0].iterator;
+    switch (iter.has_next_fn) {
         .runtime => |f| {
-            try exec_runtime_function(f, iter.iterator.data, scope);
+            try exec_runtime_function(f, iter.data, scope);
             if (scope.result()) |res| {
                 scope.return_result = res;
             } else {
@@ -1492,7 +1489,7 @@ pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
             }
         },
         .builtin => |f| {
-            try f(iter.iterator.data, scope);
+            try f(iter.data, scope);
         },
     }
 }
