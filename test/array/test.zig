@@ -26,3 +26,8 @@ test "array.simple" {
     const content = @embedFile("simple1.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "array.appending" {
+    const content = @embedFile("appending.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}

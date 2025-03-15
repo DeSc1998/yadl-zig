@@ -91,6 +91,8 @@ const mappings = .{
     .{ "peek", .{ .function = &functions.iter_peek, .arity = .{ .unnamed_count = 1 } } },
     .{ "has_next", .{ .function = &functions.iter_has_next, .arity = .{ .unnamed_count = 1 } } },
 
+    .{ "append", .{ .function = &functions.append, .arity = .{ .unnamed_count = 2 } } },
+
     .{ "print", .{ .function = &functions.print, .arity = .{ .unnamed_count = 0, .has_variadics = true } } },
     .{ "write", .{ .function = &functions.write, .arity = .{ .unnamed_count = 0, .has_variadics = true } } },
 };

@@ -1494,17 +1494,30 @@ pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
-pub fn array_append(args: []const Value, scope: *Scope) Error!void {
+pub fn append(args: libtype.CallMatch, scope: *Scope) Error!void {
+    try array_append(args.unnamed_args[0..2], scope);
+}
+
+fn array_append(args: []const Value, scope: *Scope) Error!void {
     std.debug.assert(args.len == 2);
     std.debug.assert(args[0] == .array);
 
-    const out = try scope.allocator.alloc(Value, args[0].array.len + 1);
-    @memcpy(out[0..args[0].array.len], args[0].array);
-    out[args[0].array.len] = args[1];
-    scope.return_result = .{ .array = out };
+    if (args[1] != .array) {
+        const out = try scope.allocator.alloc(Value, args[0].array.len + 1);
+        @memcpy(out[0..args[0].array.len], args[0].array);
+        out[args[0].array.len] = args[1];
+        scope.return_result = .{ .array = out };
+    } else {
+        const src = args[0].array;
+        const tmp = args[1].array;
+        const out = try scope.allocator.alloc(Value, src.len + tmp.len);
+        @memcpy(out[0..src.len], src);
+        @memcpy(out[src.len..], tmp);
+        scope.return_result = .{ .array = out };
+    }
 }
 
-pub fn array_contains(args: []const Value, scope: *Scope) Error!void {
+fn array_contains(args: []const Value, scope: *Scope) Error!void {
     std.debug.assert(args.len == 2);
     std.debug.assert(args[0] == .array);
 
