@@ -29,11 +29,12 @@ pub fn toNumber(args: libtype.CallMatch, scope: *Scope) Error!void {
         .string => |str| {
             if (std.fmt.parseFloat(f64, str)) |f| {
                 scope.return_result = .{ .number = .{ .float = f } };
-            } else |_| {
-                const tmp = std.fmt.parseInt(i64, str, 10) catch return Error.InvalidExpressoinType;
-                scope.return_result = .{ .number = .{ .integer = tmp } };
+            } else |_| if (std.fmt.parseInt(i64, str, 10)) |i| {
+                scope.return_result = .{ .number = .{ .integer = i } };
+            } else |err| {
+                std.log.err("failed to convert string to number: {}", .{err});
+                return Error.InvalidExpressoinType;
             }
-            return Error.NotImplemented;
         },
         else => |e| {
             std.debug.print("ERROR: unhandled type in 'toNumber': {s}\n", .{@tagName(e)});

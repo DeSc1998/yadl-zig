@@ -1,0 +1,49 @@
+// RUN: DEFAULT
+
+print("0 == []:", 0 == [] )
+// CHECK-OUT: 0 == []: false
+
+print("0 == {}:",  0 == {} )
+// CHECK-OUT: 0 == {}: false
+
+print( "none == {}:", none == {} )
+// CHECK-OUT: none == {}: true
+
+print( "'1' == 1:",  "1" == 1 )
+// CHECK-OUT: '1' == 1: false
+
+print( "number('1') == 1:", number("1") == 1 )
+// CHECK-OUT: number('1') == 1: true
+
+print("true == 1:", true == 1 )
+// CHECK-OUT: true == 1: false
+
+print("number(true) == 1:", number(true) == 1 )
+// CHECK-OUT: number(true) == 1: true
+
+print("[] == []:", [] == [] )
+// CHECK-OUT: [] == []: true
+
+print("[1] == []:", [1] == [] )
+// CHECK-OUT: [1] == []: false
+
+print("[1] == [1]:", [1] == [1] )
+// CHECK-OUT: [1] == [1]: true
+
+print("[1] == [2]:", [1] == [2] )
+// CHECK-OUT: [1] == [2]: false
+
+print("{} == {}:", {} == {} )
+// CHECK-OUT: {} == {}: true
+
+print("{1: 1} == {}:", {1: 1} == {} )
+// CHECK-OUT: {1: 1} == {}: false
+
+print("{1: 1} == {2: 1}:", {1: 1} == {2: 1} )
+// CHECK-OUT: {1: 1} == {2: 1}: false
+
+print("{1: 1} == {1: 1}:", {1: 1} == {1: 1} )
+// CHECK-OUT: {1: 1} == {1: 1}: true
+
+print("{1: 1} == {1: 2}:", {1: 1} == {1: 2} )
+// CHECK-OUT: {1: 1} == {1: 2}: false

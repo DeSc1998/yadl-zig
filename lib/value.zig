@@ -255,6 +255,17 @@ pub const Value = union(enum) {
                     return dict.entries.count() == 0;
                 } else return false;
             },
+            .array => |items| {
+                if (other == .array) {
+                    const tmp = other.array;
+                    if (items.len != tmp.len) return false;
+                    for (items, tmp) |left, right| {
+                        if (!left.eql(right)) return false;
+                    }
+                    return true;
+                } else return false;
+            },
+            .none => return if (other == .none) true else if (other == .dictionary and other.dictionary.entries.count() == 0) true else false,
             else => return false,
         }
     }

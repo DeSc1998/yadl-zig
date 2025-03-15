@@ -46,3 +46,8 @@ test "expressions.newline-in-expression-2" {
     const content = @embedFile("newline_in_expression_2.yadl");
     try utils.runContent(std.testing.allocator, content);
 }
+
+test "expressions.compare" {
+    const content = @embedFile("compare.yadl");
+    try utils.runContent(std.testing.allocator, content);
+}
