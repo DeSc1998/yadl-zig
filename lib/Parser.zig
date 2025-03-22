@@ -138,7 +138,11 @@ fn expect(self: *Self, kind: Kind, expected_chars: ?[]const u8) Error!Token {
                 return Error.UnexpectedToken;
             }
         }
-    } else return Error.EndOfFile;
+    } else {
+        self.last_expected = kind;
+        self.last_expected_chars = expected_chars;
+        return Error.EndOfFile;
+    }
 }
 
 fn handleAndExit(self: *Self, err: Error) void {
@@ -731,7 +735,7 @@ fn parseFunctionCall(self: *Self) Error!stmt.Statement {
             return err;
 
         if (func_name.* != .functioncall)
-            return Error.UnexpectedToken;
+            return err;
     }
 
     const tmp = func_name.*;
@@ -1300,3 +1304,41 @@ test "simple if else statement" {
     try std.testing.expectEqualStrings("test", result_else_statement.functioncall.func.identifier.name);
     try std.testing.expectEqual(0, result_else_statement.functioncall.args.len);
 }
+
+test "failing.if.missing-end" {
+    const input =
+        \\if (true) {
+        \\    aoeu = aoeu
+        \\}
+        \\else {
+        \\ test()
+    ;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var parser = Self.init(input, arena.allocator());
+    const result = parser.parse();
+    try std.testing.expectError(Error.EndOfFile, result);
+}
+
+test "failing.while.missing-end" {
+    const input =
+        \\while (true) {
+    ;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var parser = Self.init(input, arena.allocator());
+    const result = parser.parse();
+    try std.testing.expectError(Error.EndOfFile, result);
+}
+
+// TODO: parsing succeeds with empty AST. not suppose to happen
+// test "failing.function-call.missing-paren" {
+//     const input =
+//         \\print(1
+//     ;
+//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+//     defer arena.deinit();
+//     var parser = Self.init(input, arena.allocator());
+//     const result = parser.parse();
+//     try std.testing.expectError(Error.EndOfFile, result);
+// }
