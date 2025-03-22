@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest ziglang
+        pip install -r requirements.txt
     - name: Zig build
       run: python -m ziglang build
     - name: Zig unit tests
