@@ -96,9 +96,12 @@ Install [pytest](https://pypi.org/project/pytest/)
 
 #### Step 1
 
-Just compile at least once.
+Compile at least once with `zig build`.
 
 #### Step 2
+
+> NOTE: This step is optional and only required if the install location is different
+> from the default. (see `zig build --help` for custom install location)
 
 The python scripts relies on envirnoment variable to be pointed to the yadl interpreter.
 
