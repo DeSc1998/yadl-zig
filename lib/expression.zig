@@ -328,6 +328,9 @@ pub fn free_local(allocator: std.mem.Allocator, expr: Expression) void {
             }
             allocator.free(d.entries);
         },
+        .value => |v| {
+            yadlValue.free(v, allocator);
+        },
         else => {},
     }
 }

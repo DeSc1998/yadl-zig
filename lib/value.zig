@@ -324,13 +324,27 @@ fn printIdent(out: std.io.AnyWriter, level: u8) !void {
 }
 
 pub fn free(value: Value, alloc: std.mem.Allocator) void {
-    if (value == .dictionary) {
-        value.dictionary.entries.deinit();
-    } else if (value == .array) {
-        alloc.free(value.array);
-    } else if (value == .string) {
-        alloc.free(value.string);
-    } else if (value == .formatted_string) {
-        alloc.free(value.formatted_string);
+    switch (value) {
+        .dictionary => |dict| {
+            dict.entries.deinit();
+        },
+        .array => |xs| {
+            alloc.free(xs);
+        },
+        .string => |str| {
+            alloc.free(str);
+        },
+        .formatted_string => |str| {
+            alloc.free(str);
+        },
+        .function => |f| {
+            for (f.body) |st| {
+                stmt.free(alloc, st);
+            }
+            alloc.free(f.body);
+            alloc.free(f.arity.args);
+            alloc.free(f.arity.optional_args);
+        },
+        else => {},
     }
 }

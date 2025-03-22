@@ -907,8 +907,9 @@ test "function" {
     const result_stmt = result[0];
     try std.testing.expect(result_stmt == .assignment);
     try std.testing.expectEqualStrings("aoeu", result_stmt.assignment.varName.name);
-    try std.testing.expect(result_stmt.assignment.value.* == .function);
-    const function = result_stmt.assignment.value.function;
+    try std.testing.expect(result_stmt.assignment.value.* == .value);
+    try std.testing.expect(result_stmt.assignment.value.value == .function);
+    const function = result_stmt.assignment.value.value.function;
     try std.testing.expectEqual(1, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
@@ -931,8 +932,9 @@ test "function - no args" {
     try std.testing.expectEqual(1, result.len);
     const result_stmt = result[0];
     try std.testing.expect(result_stmt == .assignment);
-    try std.testing.expect(result_stmt.assignment.value.* == .function);
-    const function = result_stmt.assignment.value.function;
+    try std.testing.expect(result_stmt.assignment.value.* == .value);
+    try std.testing.expect(result_stmt.assignment.value.value == .function);
+    const function = result_stmt.assignment.value.value.function;
     try std.testing.expectEqual(0, function.arity.args.len);
     try std.testing.expectEqual(1, function.body.len);
 }
@@ -977,10 +979,6 @@ test "function call No args" {
 
 test "function call" {
     const input = "aoeu = aoeu(1, 2)";
-    const args = [2]expr.Expression{
-        .{ .number = .{ .integer = 1 } },
-        .{ .number = .{ .integer = 2 } },
-    };
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -996,15 +994,19 @@ test "function call" {
     try std.testing.expect(result_stmt.assignment.value.* == .functioncall);
     const result_fc = result_stmt.assignment.value.functioncall;
     try std.testing.expectEqualStrings("aoeu", result_fc.func.identifier.name);
-    try std.testing.expectEqualSlices(expr.Expression, args[0..], result_fc.args);
+
+    try std.testing.expectEqual(2, result_fc.args.len);
+    for (result_fc.args, 1..3) |arg, n| {
+        try std.testing.expect(.value == arg);
+        try std.testing.expect(.number == arg.value);
+        const tmp = arg.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
 }
 
 test "dictionary" {
     const input = "aoeu = { 1 : 1 }";
-    const value: expr.Value = .{ .number = .{ .integer = 1 } };
-    var exp: expr.Expression = .{ .value = value };
-    var entries: [1]expr.DictionaryEntry = undefined;
-    entries[0] = .{ .key = &exp, .value = &exp };
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -1019,22 +1021,24 @@ test "dictionary" {
     try std.testing.expectEqualStrings("aoeu", result_stmt.assignment.varName.name);
     try std.testing.expect(result_stmt.assignment.value.* == .dictionary);
     const result_arr = result_stmt.assignment.value.dictionary;
-    try std.testing.expectEqual(entries.len, result_arr.entries.len);
-    for (entries, result_arr.entries) |expected, actual| {
-        try std.testing.expectEqual(expected.key.*, actual.key.*);
-        try std.testing.expectEqual(expected.value.*, actual.value.*);
+    try std.testing.expectEqual(1, result_arr.entries.len);
+    for (1..2, result_arr.entries) |expected, actual| {
+        try std.testing.expect(.value == actual.key.*);
+        try std.testing.expect(.number == actual.key.value);
+        const tmp = actual.key.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(expected)), tmp.integer);
+
+        try std.testing.expect(.value == actual.value.*);
+        try std.testing.expect(.number == actual.value.value);
+        const tmp2 = actual.value.value.number;
+        try std.testing.expect(.integer == tmp2);
+        try std.testing.expectEqual(@as(i64, @intCast(expected)), tmp2.integer);
     }
 }
 
 test "dictionary 3 entries" {
     const input = "aoeu = { 1 : 1, 2:2   , 3   :   3 }";
-    var exp1: expr.Value = .{ .number = .{ .integer = 1 } };
-    var exp2: expr.Value = .{ .number = .{ .integer = 2 } };
-    var exp3: expr.Value = .{ .number = .{ .integer = 3 } };
-    var entries: [3]expr.DictionaryEntry = undefined;
-    entries[0] = .{ .key = &exp1, .value = &exp1 };
-    entries[1] = .{ .key = &exp2, .value = &exp2 };
-    entries[2] = .{ .key = &exp3, .value = &exp3 };
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -1049,10 +1053,19 @@ test "dictionary 3 entries" {
     try std.testing.expectEqualStrings("aoeu", result_stmt.assignment.varName.name);
     try std.testing.expect(result_stmt.assignment.value.* == .dictionary);
     const result_arr = result_stmt.assignment.value.dictionary;
-    try std.testing.expectEqual(entries.len, result_arr.entries.len);
-    for (entries, result_arr.entries) |expected, actual| {
-        try std.testing.expectEqual(expected.key.*, actual.key.*);
-        try std.testing.expectEqual(expected.value.*, actual.value.*);
+    try std.testing.expectEqual(3, result_arr.entries.len);
+    for (1..4, result_arr.entries) |expected, actual| {
+        try std.testing.expect(.value == actual.key.*);
+        try std.testing.expect(.number == actual.key.value);
+        const tmp = actual.key.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(expected)), tmp.integer);
+
+        try std.testing.expect(.value == actual.value.*);
+        try std.testing.expect(.number == actual.value.value);
+        const tmp2 = actual.value.value.number;
+        try std.testing.expect(.integer == tmp2);
+        try std.testing.expectEqual(@as(i64, @intCast(expected)), tmp2.integer);
     }
 }
 
@@ -1081,16 +1094,6 @@ test "assign after array" {
         \\aoeu = [ 1, 2,   3 ,4 ]
         \\aoeu = [ 1, 2 ]
     ;
-    // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Expression{ .value = .{ .number = .{ .integer = 1 } } };
-    var elements: [4]expr.Expression = undefined;
-    elements[0] = tmp;
-    tmp.number.integer = 2;
-    elements[1] = tmp;
-    tmp.number.integer = 3;
-    elements[2] = tmp;
-    tmp.number.integer = 4;
-    elements[3] = tmp;
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -1107,9 +1110,15 @@ test "assign after array" {
     try std.testing.expect(result_stmt_1.assignment.value.* == .array);
     try std.testing.expect(result_stmt_2.assignment.value.* == .array);
     const result_arr_1 = result_stmt_1.assignment.value.array;
-    const result_arr_2 = result_stmt_2.assignment.value.array;
-    try std.testing.expectEqualSlices(expr.Value, elements[0..], result_arr_1.elements);
-    try std.testing.expectEqualSlices(expr.Value, elements[0..], result_arr_2.elements);
+
+    try std.testing.expectEqual(4, result_arr_1.elements.len);
+    for (result_arr_1.elements, 1..5) |e, n| {
+        try std.testing.expect(.value == e);
+        try std.testing.expect(.number == e.value);
+        const tmp = e.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
 }
 
 test "comment" {
@@ -1118,16 +1127,6 @@ test "comment" {
         \\aoeu = [ 1, 2,3,4]
         \\aoeu = [ 1, 2,   3 ,4 ]
     ;
-    // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Expression{ .value = .{ .number = .{ .integer = 1 } } };
-    var elements: [4]expr.Expression = undefined;
-    elements[0] = tmp;
-    tmp.value.number.integer = 2;
-    elements[1] = tmp;
-    tmp.value.number.integer = 3;
-    elements[2] = tmp;
-    tmp.value.number.integer = 4;
-    elements[3] = tmp;
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -1145,8 +1144,24 @@ test "comment" {
     try std.testing.expect(result_stmt_2.assignment.value.* == .array);
     const result_arr_1 = result_stmt_1.assignment.value.array;
     const result_arr_2 = result_stmt_2.assignment.value.array;
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_1.elements);
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_2.elements);
+
+    try std.testing.expectEqual(4, result_arr_1.elements.len);
+    for (result_arr_1.elements, 1..5) |e, n| {
+        try std.testing.expect(.value == e);
+        try std.testing.expect(.number == e.value);
+        const tmp = e.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
+
+    try std.testing.expectEqual(4, result_arr_2.elements.len);
+    for (result_arr_2.elements, 1..5) |e, n| {
+        try std.testing.expect(.value == e);
+        try std.testing.expect(.number == e.value);
+        const tmp = e.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
 }
 
 test "newline + assign after array" {
@@ -1155,12 +1170,6 @@ test "newline + assign after array" {
         \\
         \\aoeu = [ 1, 2 ]
     ;
-    // NOTE: we assume that the assignment parsing is working correctly
-    var tmp = expr.Value{ .number = .{ .integer = 1 } };
-    var elements: [2]expr.Value = undefined;
-    elements[0] = tmp;
-    tmp.number.integer = 2;
-    elements[1] = tmp;
 
     var parser = Self.init(input, std.testing.allocator);
     const result = parser.parse() catch unreachable;
@@ -1178,8 +1187,24 @@ test "newline + assign after array" {
     try std.testing.expect(result_stmt_2.assignment.value.* == .array);
     const result_arr_1 = result_stmt_1.assignment.value.array;
     const result_arr_2 = result_stmt_2.assignment.value.array;
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_1.elements);
-    try std.testing.expectEqualSlices(expr.Expression, elements[0..], result_arr_2.elements);
+
+    try std.testing.expectEqual(2, result_arr_1.elements.len);
+    for (result_arr_1.elements, 1..3) |e, n| {
+        try std.testing.expect(.value == e);
+        try std.testing.expect(.number == e.value);
+        const tmp = e.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
+
+    try std.testing.expectEqual(2, result_arr_2.elements.len);
+    for (result_arr_2.elements, 1..3) |e, n| {
+        try std.testing.expect(.value == e);
+        try std.testing.expect(.number == e.value);
+        const tmp = e.value.number;
+        try std.testing.expect(.integer == tmp);
+        try std.testing.expectEqual(@as(i64, @intCast(n)), tmp.integer);
+    }
 }
 
 test "empty array" {
@@ -1221,8 +1246,9 @@ test "simple if statement" {
 
     const result_branch = result_stmt.if_statement.ifBranch;
 
-    try std.testing.expect(result_branch.condition.* == .boolean);
-    try std.testing.expect(result_branch.condition.boolean.value);
+    try std.testing.expect(result_branch.condition.* == .value);
+    try std.testing.expect(result_branch.condition.value == .boolean);
+    try std.testing.expect(result_branch.condition.value.boolean);
 
     const result_body_statement = result_branch.body[0];
 
@@ -1254,8 +1280,9 @@ test "simple if else statement" {
 
     const result_branch = result_stmt.if_statement.ifBranch;
 
-    try std.testing.expect(result_branch.condition.* == .boolean);
-    try std.testing.expect(result_branch.condition.boolean.value);
+    try std.testing.expect(result_branch.condition.* == .value);
+    try std.testing.expect(result_branch.condition.value == .boolean);
+    try std.testing.expect(result_branch.condition.value.boolean);
 
     try std.testing.expectEqual(1, result_branch.body.len);
     const result_body_statement = result_branch.body[0];
