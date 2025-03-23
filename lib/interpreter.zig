@@ -152,7 +152,7 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
             }
         },
         .wrapped => |e| {
-            var tmp = .{ .func = e, .args = fc.args };
+            var tmp = expr.FunctionCall{ .func = e, .args = fc.args };
             try evalFunctionCall(&tmp, scope);
         },
         .functioncall => {
@@ -163,8 +163,8 @@ pub fn evalFunctionCall(fc: *expr.FunctionCall, scope: *Scope) Error!void {
                 std.debug.print("ERROR: returned expression from function call is not a function but '{s}'\n", .{@tagName(f)});
                 return Error.InvalidExpressoinType;
             }
-            const tmp_fn = .{ .value = f };
-            var tmp2 = .{ .func = &tmp_fn, .args = fc.args };
+            const tmp_fn = expr.Expression{ .value = f };
+            var tmp2 = expr.FunctionCall{ .func = &tmp_fn, .args = fc.args };
             try evalFunctionCall(&tmp2, scope);
         },
         .value => |value| {
@@ -193,13 +193,13 @@ fn evalStructAccess(strct: *Expression, key: *Expression, scope: *Scope) Error!v
         .struct_access => |sa| {
             try evalStructAccess(sa.strct, sa.key, scope);
             const st = scope.result() orelse unreachable;
-            var tmp = .{ .value = st };
+            var tmp = expr.Expression{ .value = st };
             try evalStructAccess(&tmp, key, scope);
         },
         .identifier => {
             try evalExpression(strct, scope);
             const st = scope.result() orelse unreachable;
-            var tmp = .{ .value = st };
+            var tmp = expr.Expression{ .value = st };
             try evalStructAccess(&tmp, key, scope);
         },
         .value => |v| {
@@ -326,11 +326,9 @@ fn evalUnaryOp(op: expr.Operator, operant: *Expression, scope: *Scope) !void {
             switch (scope.result() orelse unreachable) {
                 .number => |num| {
                     if (num == .float) {
-                        const tmp = .{ .number = .{ .float = -num.float } };
-                        scope.return_result = tmp;
+                        scope.return_result = expr.Value{ .number = .{ .float = -num.float } };
                     } else {
-                        const tmp = .{ .number = .{ .integer = -num.integer } };
-                        scope.return_result = tmp;
+                        scope.return_result = expr.Value{ .number = .{ .integer = -num.integer } };
                     }
                 },
                 else => |value| {

@@ -320,7 +320,7 @@ fn parseValue(self: *Self) Error!*expr.Expression {
             .Operator => return self.parseUnaryOp(),
             .Keyword => {
                 _ = try self.expect(.Keyword, "none");
-                return expr.initValue(self.allocator, expr.Value.none());
+                return expr.initValue(self.allocator, .{ .none = null });
             },
             else => {
                 self.last_expected = .Unknown;
@@ -559,7 +559,7 @@ fn parseNumber(self: *Self) Error!*expr.Expression {
     const base = baseOf(digits.chars);
 
     if (std.mem.count(u8, digits.chars, ".") > 0) {
-        var parts = std.mem.split(u8, digits.chars, ".");
+        var parts = std.mem.splitAny(u8, digits.chars, ".");
         const tmp = parts.next() orelse unreachable;
         const int_part = if (base == 10) tmp else tmp[2..];
         const fraction_part = parts.next() orelse unreachable;

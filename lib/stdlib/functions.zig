@@ -1284,7 +1284,7 @@ pub fn string_split(args: libtype.CallMatch, scope: *Scope) Error!void {
     );
     var out = std.ArrayList(Value).init(scope.allocator);
     while (iter.next()) |str| {
-        const tmp = .{ .string = str };
+        const tmp = Value{ .string = str };
         try out.append(tmp);
     }
     scope.return_result = .{ .array = try out.toOwnedSlice() };

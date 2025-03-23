@@ -1,2 +1,2 @@
-ziglang==0.13.0
+ziglang==0.14.0
 pytest>=8.3.3

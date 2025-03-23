@@ -9,7 +9,7 @@ pub fn load_lines(path: []const u8, allocator: std.mem.Allocator) ![][]const u8 
     const content = try file.readToEndAlloc(allocator, stat.size);
     // defer allocator.free(content);
 
-    var splitter = std.mem.split(u8, content, "\n");
+    var splitter = std.mem.splitAny(u8, content, "\n");
     var out = std.ArrayList([]const u8).init(allocator);
     while (splitter.next()) |line| {
         if (line.len == 0 and splitter.peek() == null)
@@ -40,13 +40,13 @@ pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !expression.Valu
     const stat = try file.stat();
     const content = try file.readToEndAlloc(allocator, stat.size);
 
-    var splitter = std.mem.split(u8, content, "\n");
+    var splitter = std.mem.splitAny(u8, content, "\n");
     var header: ?[][]const u8 = null;
     if (splitter.next()) |h| {
         if (is_header(h)) {
             // std.debug.print("INFO: 'is_header' was true\n", .{});
             var tmp = std.ArrayList([]const u8).init(allocator);
-            var keys_splitter = std.mem.split(u8, h, ",");
+            var keys_splitter = std.mem.splitAny(u8, h, ",");
             while (keys_splitter.next()) |key| {
                 if (key.len > 2 and key[0] == '"') {
                     try tmp.append(key[1 .. key.len - 1]);
@@ -81,7 +81,7 @@ pub fn load_csv(path: []const u8, allocator: std.mem.Allocator) !expression.Valu
 fn parse_line(line: []const u8, allocator: std.mem.Allocator) ![]expression.Value {
     const Lexer = @import("../Lexer.zig");
     if (line.len == 0) return error.LineEmpty;
-    var splitter = std.mem.split(u8, line, ",");
+    var splitter = std.mem.splitAny(u8, line, ",");
     var out = std.ArrayList(expression.Value).init(allocator);
     while (splitter.next()) |element| {
         var lexer = Lexer.init(element);
@@ -130,7 +130,7 @@ fn parseNumber(chars: []const u8) !expression.Value {
     const base = baseOf(chars);
 
     if (std.mem.count(u8, chars, ".") > 0) {
-        var parts = std.mem.split(u8, chars, ".");
+        var parts = std.mem.splitAny(u8, chars, ".");
         const tmp = parts.next() orelse unreachable;
         const int_part = if (base == 10) tmp else tmp[2..];
         const fraction_part = parts.rest();
@@ -152,7 +152,7 @@ fn parseNumber(chars: []const u8) !expression.Value {
 }
 
 fn is_header(line: []const u8) bool {
-    var splitter = std.mem.split(u8, line, ",");
+    var splitter = std.mem.splitAny(u8, line, ",");
     while (splitter.next()) |element| {
         // std.debug.print("INFO: considering element: '{s}'\n", .{element});
         if (element.len > 2 and element[0] == '"' and element[element.len - 1] == '"') {
@@ -190,7 +190,7 @@ fn map_to_expression(allocator: std.mem.Allocator, value: std.json.Value) std.me
                 const s: []u8 = try allocator.alloc(u8, entry.key_ptr.len);
                 std.mem.copyForwards(u8, s, entry.key_ptr.*);
                 const val = try map_to_expression(allocator, entry.value_ptr.*);
-                const str = .{ .string = s };
+                const str = expression.Value{ .string = s };
                 try tmp.put(str, val);
             }
             break :b try expression.yadlValue.Dictionary.init(tmp);

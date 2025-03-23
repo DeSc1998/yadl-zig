@@ -227,10 +227,6 @@ pub const Value = union(enum) {
     iterator: Iterator,
     function: Function,
 
-    pub fn none() Value {
-        return Value{ .none = null };
-    }
-
     pub fn eql(self: Value, other: Value) bool {
         switch (self) {
             .number => |n| {

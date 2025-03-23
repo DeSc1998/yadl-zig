@@ -131,7 +131,7 @@ pub fn update(self: *Scope, ident: expr.Identifier, value: expr.Value) Error!voi
         const f = value.function;
         if (self.functions.get(ident.name)) |_| {
             const new_body = try self.captureExternals(f.arity, f.body);
-            const new_fn = .{
+            const new_fn = expr.yadlValue.Function{
                 .arity = f.arity,
                 .body = new_body,
             };
@@ -199,7 +199,7 @@ fn captureFromStatement(statement: Statement, bound: *std.ArrayList([]const u8),
         },
         .@"return" => |r| b: {
             const ret_val = try captureFromValue(r.value, bound, scope);
-            const out = .{ .@"return" = .{
+            const out = Statement{ .@"return" = .{
                 .value = ret_val,
             } };
             break :b out;

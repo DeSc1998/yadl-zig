@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addImport("yadl", &yadl.root_module);
+    exe.root_module.addImport("yadl", yadl.root_module);
 
     const run_cmd = b.addRunArtifact(exe);
 
@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    test_utils.root_module.addImport("yadl", &yadl.root_module);
+    test_utils.root_module.addImport("yadl", yadl.root_module);
 
     const test_dirs: []const []const u8 = &[_][]const u8{
         "array",
@@ -83,15 +83,15 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        test_case.root_module.addImport("test-utils", &test_utils.root_module);
+        test_case.root_module.addImport("test-utils", test_utils.root_module);
         const run_test_case = b.addRunArtifact(test_case);
         test_step.dependOn(&run_test_case.step);
     }
 
     // clean up
     const clean_step = b.step("clean", "Remove output and cache directory");
-    const clean_output = b.addRemoveDirTree("./zig-out/");
-    const clean_cache = b.addRemoveDirTree("./.zig-cache/");
+    const clean_output = b.addRemoveDirTree(b.path("./zig-out/"));
+    const clean_cache = b.addRemoveDirTree(b.path("./.zig-cache/"));
     clean_step.dependOn(&clean_output.step);
     clean_step.dependOn(&clean_cache.step);
 
@@ -131,7 +131,7 @@ fn addBinary(
         .target = options_release,
         .optimize = mode,
     });
-    yadl_exe.root_module.addImport("yadl", &yadl_release.root_module);
+    yadl_exe.root_module.addImport("yadl", yadl_release.root_module);
 
     release_step.dependOn(&yadl_release.step);
     release_step.dependOn(&yadl_exe.step);

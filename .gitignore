@@ -19,3 +19,4 @@ test-save-csv.csv
 test-save-json.json
 test-save.csv
 release_hashes.sh
+zig-cache
