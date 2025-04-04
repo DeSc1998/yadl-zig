@@ -4,7 +4,7 @@ var should_build_release = false;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
 
     const program_name = if (target.query.os_tag == .macos) "yadl-mac" else if (target.query.os_tag == .windows) "yadl-win" else "yadl-linux";
 
@@ -24,19 +24,35 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("yadl", yadl.root_module);
 
-    const run_cmd = b.addRunArtifact(exe);
+    const parzig = b.dependency("parzig", .{});
+    const parzig_mod = parzig.module("parzig");
+    const lsp_server = b.addExecutable(.{
+        .name = "yls",
+        .root_source_file = b.path("src/lsp/server.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lsp_server.root_module.addImport("parzig", parzig_mod);
 
     b.installArtifact(yadl);
     b.installArtifact(exe);
+    b.installArtifact(lsp_server);
 
+    const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const lsp_cmd = b.addRunArtifact(lsp_server);
+    lsp_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        lsp_cmd.addArgs(args);
+    }
+    const lsp_step = b.step("lsp", "Run the lsp server");
+    lsp_step.dependOn(&lsp_cmd.step);
 
     // testing
     const test_utils = b.addSharedLibrary(.{
