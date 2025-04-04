@@ -1,0 +1,21 @@
+.{
+    .name = .yadl_zig,
+    .version = "0.0.0",
+    .fingerprint = 0x99ba13e4250f9952,
+    .minimum_zig_version = "0.14.0",
+
+    .dependencies = .{
+        .parzig = .{
+            .url = "git+https://github.com/DeSc1998/parzig.git#bb9a5f9f2b6e6ea156b6395b5f1ca0e9958c2321",
+            .hash = "parzig-0.0.0-1GCSwf7FAAB6Q_6dZZqtfXrA1GBsPbUfKARAs8N4H3J-",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "lib",
+        "LICENSE",
+        "README.md",
+    },
+}
