@@ -1,12 +1,22 @@
 import os
+import sys
 import subprocess
 import filecmp
 from pathlib import Path
 
-DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_BIN')} '%s'"
+
+if sys.platform.startswith('linux'):
+    BINARY = 'zig-out/bin/yadl-linux'
+if sys.platform.startswith('darwin'):
+    BINARY = 'zig-out/bin/yadl-macos'
+if sys.platform.startswith('win32'):
+    BINARY = 'zig-out/bin/yadl-windows'
+
+DEFAULT_RUN_COMMAND = f"{os.getenv('YADL_BIN', BINARY)} '%s'"
+DEFAULT_COMPILE_COMMAND = f"{os.getenv('YADL_BIN', BINARY)} --compile '%s'"
 
 
-def parse_yadl(filepath):
+def parse_yadl(filepath, is_compiled):
     test_cfg = {
         "filepath": filepath,
         "out": [],
@@ -41,8 +51,13 @@ def parse_yadl(filepath):
                 ), f'RUN command found multiple times in file "{filepath}"'
 
                 if tokens[2] == "DEFAULT":
-                    test_cfg["run"] = DEFAULT_RUN_COMMAND.replace(
-                        "%s", filepath)
+                    if not is_compiled:
+                        test_cfg["run"] = DEFAULT_RUN_COMMAND.replace(
+                            "%s", filepath)
+                    else:
+                        test_cfg["run"] = DEFAULT_COMPILE_COMMAND.replace(
+                            "%s", filepath)
+
                 else:
                     test_cfg["run"] = " ".join(tokens[2:])
             # check output
@@ -121,14 +136,14 @@ def to_dir(config, path):
     return str(Path(config["filepath"]).relative_to(path))
 
 
-def load_configs(path):
+def load_configs(path, is_compiled=False):
     configurations = []
     file_names = []
     TEST_DIR = os.path.abspath(path)
 
     for posix_path in Path(TEST_DIR).rglob("*.yadl"):
         full_path = os.path.join(os.path.dirname(TEST_DIR), posix_path)
-        configurations.append(parse_yadl(str(full_path)))
+        configurations.append(parse_yadl(str(full_path), is_compiled))
         file_names.append(str(Path(full_path).relative_to(TEST_DIR)))
 
     return (configurations, file_names)

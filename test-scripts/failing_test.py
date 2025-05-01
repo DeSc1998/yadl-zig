@@ -1,20 +1,13 @@
-import os
 import pytest
-from pathlib import Path
 
-from helper import parse_yadl, run_failing_test, to_dir
+from helper import load_configs, run_failing_test
 
-configurations = []
-TEST_DIR = os.path.abspath("test/failing")
-for posix_path in Path(TEST_DIR).rglob("*.yadl"):
-    full_path = os.path.join(os.path.dirname(TEST_DIR), posix_path)
-    configurations.append((parse_yadl(str(full_path)), TEST_DIR))
-file_names = map(lambda t: to_dir(t[0], t[1]), configurations)
+(configurations, file_names) = load_configs('test/failing')
 
 
 @pytest.mark.parametrize("config", configurations, ids=file_names)
 def test_config(config):
-    run_failing_test(config[0])
+    run_failing_test(config)
 
 
 def pytest_collection_modifyitems(items):
