@@ -9,6 +9,8 @@ const stdlib = @import("stdlib.zig");
 pub const Error = error{
     NotImplemented,
     UndefinedFunction,
+    NotEnoughArguments,
+    ToManyArguments,
     UndefinedVariable,
     IllegalReturn,
     ParserError,
@@ -44,8 +46,8 @@ const OpCode = enum(u8) {
 
     LoadStatic, // NOTE: loads value at `address` from static memory into register 7
 
-    Call,
-    CallStd,
+    Call, // NOTE: call arguments are expected to be on the stack
+    CallStd, // NOTE: call arguments are expected to be on the stack
     Return,
 };
 
@@ -98,12 +100,23 @@ pub const Instruction = packed struct(u32) {
             try writer.print(" {s:<10} {}\n", .{ @tagName(self.op_code), addr });
         } else {
             const regs = self.argument.registers;
-            try writer.print(" {s:<6} {} <- {} {}\n", .{
-                @tagName(self.op_code),
-                regs.destination,
-                regs.source_left,
-                regs.source_right,
-            });
+            switch (self.op_code) {
+                .Move, .Not => try writer.print(" {s:<6} {} <- {}\n", .{
+                    @tagName(self.op_code),
+                    regs.destination,
+                    regs.source_left,
+                }),
+                .Push, .Pop => try writer.print(" {s:<6} {}\n", .{
+                    @tagName(self.op_code),
+                    regs.destination,
+                }),
+                else => try writer.print(" {s:<6} {} <- {} {}\n", .{
+                    @tagName(self.op_code),
+                    regs.destination,
+                    regs.source_left,
+                    regs.source_right,
+                }),
+            }
         }
     }
 };
@@ -230,22 +243,49 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
     };
 }
 
-fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, target: u8) Error!void {
-    std.debug.assert(fc.args.len <= 1);
-    if (fc.args.len == 1) {
-        try compile_expression(compiler, &fc.args[0], target);
+fn compile_call_arguments(
+    compiler: *Compiler,
+    args: []const expression.Expression,
+    context: stdlib.FunctionContext,
+) Error!void {
+    if (context.arity.has_variadics and context.arity.unnamed_count > args.len or context.arity.unnamed_count > args.len) {
+        return Error.NotEnoughArguments;
     }
+    if (!context.arity.has_variadics and context.arity.unnamed_count < args.len) {
+        return Error.ToManyArguments;
+    }
+    for (args) |*arg| {
+        try compile_expression(compiler, arg, 0);
+        try compiler.main.append(Instruction.register(.Push, 0, null, null));
+    }
+    const tmp = expression.Expression{ .value = .{ .number = .{ .integer = @intCast(args.len) } } };
+    try compile_expression(compiler, &tmp, 0);
+}
+
+fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, target: u8) Error!void {
     if (fc.func.* != .identifier) {
         std.log.err("not implemented: function call, non identifier case ", .{});
         return Error.NotImplemented;
     }
 
     if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
+        const context = stdlib.builtins.get(fc.func.identifier.name) orelse unreachable;
+        try compile_call_arguments(compiler, fc.args, context);
         try compiler.main.append(Instruction.address(.CallStd, @as(u24, @truncate(addr))));
     } else {
         const data = compiler.function_table.get(fc.func.identifier.name) orelse return Error.UndefinedFunction;
         const addr = data.offset;
+        try compile_call_arguments(compiler, fc.args, .{
+            .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
+            .arity = .{
+                .unnamed_count = @as(u32, @truncate(data.arity.args.len)),
+                .has_variadics = if (data.arity.var_args) |_| true else false,
+            },
+        });
         try compiler.main.append(Instruction.address(.Call, addr));
+    }
+    if (target != 0) {
+        try compiler.main.append(Instruction.register(.Move, target, 0, null));
     }
 }
 
@@ -300,7 +340,10 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                 return Error.UndefinedVariable;
             }
         },
-        else => return Error.NotImplemented,
+        else => {
+            std.log.err("not implemented expression case: {s}", .{@tagName(expr.*)});
+            return Error.NotImplemented;
+        },
     }
 }
 
@@ -315,6 +358,14 @@ fn arithmetic_op_to_instruction(op: expression.ArithmeticOps) OpCode {
     };
 }
 
+fn boolean_op_to_instruction(op: expression.BooleanOps) OpCode {
+    return switch (op) {
+        .And => OpCode.And,
+        .Or => OpCode.Or,
+        .Not => OpCode.Not,
+    };
+}
+
 fn compile_binary_expression(
     compiler: *Compiler,
     op: expression.Operator,
@@ -323,15 +374,23 @@ fn compile_binary_expression(
     right: u8,
 ) Error!void {
     try switch (op) {
-        .arithmetic => |a| compiler.main.append(Instruction.register(
-            arithmetic_op_to_instruction(a),
-            target,
-            left,
-            right,
-        )),
-        else => |o| {
-            std.log.err("Not implemented: in 'compile_binary_expression': {s}", .{@tagName(o)});
-            return Error.NotImplemented;
+        .arithmetic => |a| compiler.main.append(
+            Instruction.register(arithmetic_op_to_instruction(a), target, left, right),
+        ),
+        .boolean => |b| compiler.main.append(
+            Instruction.register(boolean_op_to_instruction(b), target, left, right),
+        ),
+        .compare => |c| switch (c) {
+            expression.CompareOps.Equal => compiler.main.append(
+                Instruction.register(.CmpEq, target, left, right),
+            ),
+            expression.CompareOps.Less => compiler.main.append(
+                Instruction.register(.CmpLess, target, left, right),
+            ),
+            else => |o| {
+                std.log.err("Not implemented: in 'compile_binary_expression': compare op {s}", .{@tagName(o)});
+                return Error.NotImplemented;
+            },
         },
     };
 }

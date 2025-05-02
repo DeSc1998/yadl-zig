@@ -91,6 +91,78 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 },
             }
         },
+        .Mod => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            switch (left) {
+                .number => |l| {
+                    if (right != .number) {
+                        std.log.err(
+                            "can not apply modulo to '{s}' and '{s}': implicit conversion not allowed",
+                            .{ @tagName(left), @tagName(right) },
+                        );
+                        return Error.IllegalValue;
+                    }
+                    m.registers[regs.destination] = .{ .number = l.mod(right.number) };
+                },
+                else => |val| {
+                    std.log.err(
+                        "can not apply modulo to left-side '{s}': implicit conversion not allowed",
+                        .{@tagName(val)},
+                    );
+                    return Error.IllegalValue;
+                },
+            }
+        },
+        .Div => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            switch (left) {
+                .number => |l| {
+                    if (right != .number) {
+                        std.log.err(
+                            "can not divide '{s}' and '{s}': implicit conversion not allowed",
+                            .{ @tagName(left), @tagName(right) },
+                        );
+                        return Error.IllegalValue;
+                    }
+                    m.registers[regs.destination] = .{ .number = l.div(right.number) };
+                },
+                else => |val| {
+                    std.log.err(
+                        "can not divide left-side '{s}': implicit conversion not allowed",
+                        .{@tagName(val)},
+                    );
+                    return Error.IllegalValue;
+                },
+            }
+        },
+        .Expo => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            switch (left) {
+                .number => |l| {
+                    if (right != .number) {
+                        std.log.err(
+                            "can not exponatiate '{s}' to '{s}': implicit conversion not allowed",
+                            .{ @tagName(left), @tagName(right) },
+                        );
+                        return Error.IllegalValue;
+                    }
+                    m.registers[regs.destination] = .{ .number = l.expo(right.number) };
+                },
+                else => |val| {
+                    std.log.err(
+                        "can not exponatiate left-side '{s}': implicit conversion not allowed",
+                        .{@tagName(val)},
+                    );
+                    return Error.IllegalValue;
+                },
+            }
+        },
         .Add => {
             const regs = inst.argument.registers;
             const left = m.registers[regs.source_left];
@@ -126,18 +198,64 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 },
             }
         },
+        .Sub => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            switch (left) {
+                .number => |l| {
+                    if (right != .number) {
+                        std.log.err(
+                            "can not subtract '{s}' and '{s}': implicit conversion not allowed",
+                            .{ @tagName(left), @tagName(right) },
+                        );
+                        return Error.IllegalValue;
+                    }
+                    m.registers[regs.destination] = .{ .number = l.sub(right.number) };
+                },
+                else => |val| {
+                    std.log.err(
+                        "can not subtract left-side '{s}': implicit conversion not allowed",
+                        .{@tagName(val)},
+                    );
+                    return Error.IllegalValue;
+                },
+            }
+        },
         .CallStd => {
             const addr = inst.argument.address;
             const name = stdlib.builtins.keys()[addr];
             const context = stdlib.builtins.get(name) orelse unreachable;
-            var tmp: [1]value.Value = undefined;
-            tmp[0] = m.registers[0];
-            const match = stdlib.match_call_args(tmp[0..1], context.arity) catch return Error.IllegalValue;
+            std.debug.assert(m.registers[0] == .number);
+            const size: usize = @intCast(m.registers[0].number.integer);
+            var tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
+            defer m.value_stack.allocator.free(tmp);
+            for (0..tmp.len) |index| {
+                const v = m.value_stack.pop() orelse unreachable;
+                tmp[tmp.len - index - 1] = v;
+            }
+            const match = stdlib.match_call_args(tmp, context.arity) catch return Error.IllegalValue;
             var scope = Scope.empty(m.frame_stack.allocator, m.out);
             context.function(match, &scope) catch return Error.IllegalValue;
             if (scope.result()) |result| {
                 m.registers[0] = result;
             }
+        },
+        .CmpEq => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            m.registers[regs.destination] = .{ .boolean = left.eql(right) };
+        },
+        .Push => {
+            const regs = inst.argument.registers;
+            const dest = regs.destination;
+            try m.value_stack.append(m.registers[dest]);
+        },
+        .Pop => {
+            const regs = inst.argument.registers;
+            const dest = regs.destination;
+            m.registers[dest] = m.value_stack.pop() orelse unreachable;
         },
         else => {
             std.log.err("not implemented: execution of instruction: {s}", .{@tagName(inst.op_code)});
