@@ -17,6 +17,7 @@ pub fn toBoolean(args: libtype.CallMatch, scope: *Scope) Error!void {
         .array => |a| scope.return_result = .{ .boolean = a.len != 0 },
         .dictionary => |d| scope.return_result = .{ .boolean = d.entries.count() != 0 },
         .string => |s| scope.return_result = .{ .boolean = s.len != 0 },
+        .none => scope.return_result = .{ .boolean = false },
         else => return Error.NotImplemented,
     }
 }
@@ -36,6 +37,7 @@ pub fn toNumber(args: libtype.CallMatch, scope: *Scope) Error!void {
                 return Error.InvalidExpressoinType;
             }
         },
+        .none => scope.return_result = .{ .number = .{ .integer = 0 } },
         else => |e| {
             std.debug.print("ERROR: unhandled type in 'toNumber': {s}\n", .{@tagName(e)});
             return Error.NotImplemented;
@@ -80,6 +82,7 @@ pub fn toString(args: libtype.CallMatch, scope: *Scope) Error!void {
             },
         },
         .string => scope.return_result = expr,
+        .none => scope.return_result = .{ .string = "none" },
         else => |v| {
             std.log.err("can not convert to string: {s}", .{@tagName(v)});
             return Error.InvalidExpressoinType;
