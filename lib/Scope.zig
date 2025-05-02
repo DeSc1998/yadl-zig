@@ -150,9 +150,6 @@ pub fn captureExternals(scope: *Scope, fn_arity: expr.Function.Arity, fn_body: [
     for (fn_arity.args) |arg| {
         try bound.append(arg.name);
     }
-    for (fn_arity.optional_args) |arg| {
-        try bound.append(arg.name);
-    }
 
     if (fn_arity.var_args) |va|
         try bound.append(va.name);

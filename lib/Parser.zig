@@ -488,10 +488,6 @@ fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
                 const var_args = expr.Identifier{ .name = current_identifier.chars };
                 return expr.Function.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
             },
-            .Operator => {
-                self.print("TODO: implementation of optional arguments in function definition", .{});
-                return Error.NotImplemented;
-            },
             .CloseParen => {
                 try normal_args.append(.{ .name = current_identifier.chars });
                 return expr.Function.Arity.init(try normal_args.toOwnedSlice());

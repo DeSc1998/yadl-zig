@@ -89,7 +89,6 @@ pub const Function = struct {
     pub const Arity = struct {
         // allocator: std.mem.Allocator,
         args: []Identifier,
-        optional_args: []Identifier = ([0]Identifier{})[0..],
         var_args: ?Identifier = null,
 
         pub fn init(args: []Identifier) Arity {
@@ -99,18 +98,6 @@ pub const Function = struct {
         pub fn initVarArgs(args: []Identifier, var_args: Identifier) Arity {
             return .{
                 .args = args,
-                .var_args = var_args,
-            };
-        }
-
-        pub fn initFull(
-            args: []Identifier,
-            options: []Identifier,
-            var_args: ?Identifier,
-        ) Arity {
-            return .{
-                .args = args,
-                .optional_args = options,
                 .var_args = var_args,
             };
         }
@@ -339,7 +326,6 @@ pub fn free(value: Value, alloc: std.mem.Allocator) void {
             }
             alloc.free(f.body);
             alloc.free(f.arity.args);
-            alloc.free(f.arity.optional_args);
         },
         else => {},
     }
