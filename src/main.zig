@@ -52,8 +52,6 @@ fn runCompiled(stdout: std.io.AnyWriter, files: []const []const u8) !void {
             continue;
         };
 
-        // _ = try stdout.write(input);
-
         var out = try yadl.compile_source(input, allocator);
         try yadl.execute_source(out, stdout);
         out.deinit();
