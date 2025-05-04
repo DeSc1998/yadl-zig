@@ -6,6 +6,7 @@ const stdlibType = @import("stdlib/type.zig");
 pub const Value = yadlValue.Value;
 pub const Iterator = yadlValue.Iterator;
 pub const Function = yadlValue.Function;
+pub const Arity = yadlValue.Arity;
 pub const ValueMap = yadlValue.ValueMap;
 
 pub const ArithmeticOps = enum { Add, Sub, Mul, Div, Expo, Mod };

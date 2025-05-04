@@ -55,7 +55,7 @@ pub fn fromCallMatch(
     alloc: std.mem.Allocator,
     out: std.io.AnyWriter,
     parent: *Scope,
-    func_arity: expr.Function.Arity,
+    func_arity: expr.Arity,
     call_match: stdlib.libtype.CallMatch,
 ) !Scope {
     var tmp: Scope = .{
@@ -144,7 +144,7 @@ pub fn update(self: *Scope, ident: expr.Identifier, value: expr.Value) Error!voi
     }
 }
 
-pub fn captureExternals(scope: *Scope, fn_arity: expr.Function.Arity, fn_body: []const Statement) Error![]Statement {
+pub fn captureExternals(scope: *Scope, fn_arity: expr.Arity, fn_body: []const Statement) Error![]Statement {
     var bound = std.ArrayList([]const u8).init(scope.allocator);
     const new_body = try scope.allocator.alloc(Statement, fn_body.len);
     for (fn_arity.args) |arg| {

@@ -8,6 +8,7 @@ const Scope = @import("Scope.zig");
 const Error = error{
     NotImplemented,
     IllegalValue,
+    EmptyStack,
 } || std.mem.Allocator.Error;
 
 const Frame = struct {
@@ -16,7 +17,7 @@ const Frame = struct {
 };
 
 const Maschine = struct {
-    registers: [std.math.maxInt(u8)]value.Value = undefined,
+    registers: [std.math.maxInt(u8) + 1]value.Value = undefined,
     function_table: []const compiler.Program,
     value_stack: std.ArrayList(value.Value),
     frame_stack: std.ArrayList(Frame),
@@ -57,7 +58,7 @@ fn is_finished_frame(f: *const Frame) bool {
 }
 
 fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
-    const current_frame = m.frame_stack.items.len - 1;
+    var current_frame = m.frame_stack.items.len - 1;
     switch (inst.op_code) {
         .LoadStatic => {
             const addr = inst.argument.address;
@@ -228,11 +229,10 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const context = stdlib.builtins.get(name) orelse unreachable;
             std.debug.assert(m.registers[0] == .number);
             const size: usize = @intCast(m.registers[0].number.integer);
-            var tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
+            const tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
             defer m.value_stack.allocator.free(tmp);
-            for (0..tmp.len) |index| {
-                const v = m.value_stack.pop() orelse unreachable;
-                tmp[tmp.len - index - 1] = v;
+            for (tmp) |*out| {
+                out.* = m.value_stack.pop() orelse unreachable;
             }
             const match = stdlib.match_call_args(tmp, context.arity) catch return Error.IllegalValue;
             var scope = Scope.empty(m.frame_stack.allocator, m.out);
@@ -247,6 +247,44 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const right = m.registers[regs.source_right];
             m.registers[regs.destination] = .{ .boolean = left.eql(right) };
         },
+        .CmpLess => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            if (left == .number and right == .number) {
+                const result = left.number.sub(right.number);
+                if (result == .integer) {
+                    m.registers[regs.destination] = .{ .boolean = result.integer < 0 };
+                } else {
+                    m.registers[regs.destination] = .{ .boolean = result.float < 0 };
+                }
+            } else {
+                std.log.err("unable to compare under less: {s} and {s}", .{ @tagName(left), @tagName(right) });
+                return Error.IllegalValue;
+            }
+        },
+        .Not => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            std.debug.assert(left == .boolean);
+            m.registers[regs.destination] = .{ .boolean = !left.boolean };
+        },
+        .And => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            std.debug.assert(left == .boolean);
+            std.debug.assert(right == .boolean);
+            m.registers[regs.destination] = .{ .boolean = left.boolean and right.boolean };
+        },
+        .Or => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+            std.debug.assert(left == .boolean);
+            std.debug.assert(right == .boolean);
+            m.registers[regs.destination] = .{ .boolean = left.boolean or right.boolean };
+        },
         .Push => {
             const regs = inst.argument.registers;
             const dest = regs.destination;
@@ -255,7 +293,28 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Pop => {
             const regs = inst.argument.registers;
             const dest = regs.destination;
-            m.registers[dest] = m.value_stack.pop() orelse unreachable;
+            m.registers[dest] = m.value_stack.pop() orelse {
+                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                std.log.err("stack was empty @ sp = {}, f = {}", .{
+                    stack_ptr,
+                    current_frame,
+                });
+                const stderr = std.io.getStdErr().writer();
+                const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
+                for (0..10) |index| {
+                    const current = base + index;
+                    const i = m.frame_stack.items[current_frame].program.instructions[current];
+                    if (current == stack_ptr) {
+                        stderr.print("------ current instruction -------\n", .{}) catch unreachable;
+                    }
+                    i.dump(stderr.any()) catch unreachable;
+                    if (current == stack_ptr) {
+                        stderr.print("----------------------------------\n", .{}) catch unreachable;
+                    }
+                }
+                std.log.err("------------------------------", .{});
+                return Error.EmptyStack;
+            };
         },
         .AccessRead => {
             const regs = inst.argument.registers;
@@ -315,6 +374,22 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     try dict.entries.put(left, right);
                 },
                 else => unreachable,
+            }
+        },
+        .Return => {
+            current_frame -= 1;
+            _ = m.frame_stack.pop();
+        },
+        .Jmp => {
+            const addr = inst.argument.address;
+            m.frame_stack.items[current_frame].stack_ptr = addr;
+        },
+        .JmpOnFalse => {
+            const addr = inst.argument.address;
+            const condition = m.registers[0];
+            std.debug.assert(condition == .boolean);
+            if (!condition.boolean) {
+                m.frame_stack.items[current_frame].stack_ptr = addr;
             }
         },
         else => {

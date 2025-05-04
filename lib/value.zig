@@ -82,26 +82,31 @@ pub const Number = union(enum) {
     }
 };
 
+pub const Arity = struct {
+    // allocator: std.mem.Allocator,
+    args: []Identifier,
+    var_args: ?Identifier = null,
+
+    pub fn init(args: []Identifier) Arity {
+        return .{ .args = args };
+    }
+
+    pub fn initVarArgs(args: []Identifier, var_args: Identifier) Arity {
+        return .{
+            .args = args,
+            .var_args = var_args,
+        };
+    }
+};
+
+pub const CompiledFunction = struct {
+    function_address: u24,
+    arity: Arity,
+};
+
 pub const Function = struct {
     arity: Arity,
     body: []const stmt.Statement,
-
-    pub const Arity = struct {
-        // allocator: std.mem.Allocator,
-        args: []Identifier,
-        var_args: ?Identifier = null,
-
-        pub fn init(args: []Identifier) Arity {
-            return .{ .args = args };
-        }
-
-        pub fn initVarArgs(args: []Identifier, var_args: Identifier) Arity {
-            return .{
-                .args = args,
-                .var_args = var_args,
-            };
-        }
-    };
 
     pub fn init(
         arity: Arity,
@@ -213,6 +218,7 @@ pub const Value = union(enum) {
     dictionary: Dictionary,
     iterator: Iterator,
     function: Function,
+    compiled_function: CompiledFunction,
 
     pub fn eql(self: Value, other: Value) bool {
         switch (self) {

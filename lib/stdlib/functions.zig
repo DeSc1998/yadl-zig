@@ -466,7 +466,7 @@ fn equal_to_key(groupper: Value, key: Value, scope: *Scope) !expression.Value {
     );
     const args = try scope.allocator.alloc(expression.Identifier, 1);
     args[0] = .{ .name = "x" };
-    const arity = expression.Function.Arity{ .args = args };
+    const arity = expression.Arity{ .args = args };
     const sts = try scope.allocator.alloc(Statement, 2);
     sts[0] = .{ .assignment = .{ .varName = tmp.identifier, .value = fn_call } };
     sts[1] = .{ .@"return" = .{ .value = bin } };

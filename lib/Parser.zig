@@ -472,8 +472,8 @@ fn parseIdent(self: *Self) Error!expr.Identifier {
     return expr.identifier(id.chars);
 }
 
-fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
-    var current_identifier = self.expect(.Identifier, null) catch return expr.Function.Arity.init(([0]expr.Identifier{})[0..]);
+fn parseFunctionArity(self: *Self) Error!expr.Arity {
+    var current_identifier = self.expect(.Identifier, null) catch return expr.Arity.init(([0]expr.Identifier{})[0..]);
     var normal_args = std.ArrayList(expr.Identifier).init(self.allocator);
     while (self.expect(.ArgSep, null)) |_| {
         try normal_args.append(.{ .name = current_identifier.chars });
@@ -486,11 +486,11 @@ fn parseFunctionArity(self: *Self) Error!expr.Function.Arity {
             .VarArgsDots => {
                 _ = self.expect(.VarArgsDots, null) catch unreachable;
                 const var_args = expr.Identifier{ .name = current_identifier.chars };
-                return expr.Function.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
+                return expr.Arity.initVarArgs(try normal_args.toOwnedSlice(), var_args);
             },
             .CloseParen => {
                 try normal_args.append(.{ .name = current_identifier.chars });
-                return expr.Function.Arity.init(try normal_args.toOwnedSlice());
+                return expr.Arity.init(try normal_args.toOwnedSlice());
             },
             else => return err,
         }

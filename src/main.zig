@@ -52,7 +52,12 @@ fn runCompiled(stdout: std.io.AnyWriter, files: []const []const u8) !void {
             continue;
         };
 
+        // try stdout.print("{s}\n", .{input});
+
         var out = try yadl.compile_source(input, allocator);
+        // for (out.main_program.instructions) |inst| {
+        //     try inst.dump(stdout);
+        // }
         try yadl.execute_source(out, stdout);
         out.deinit();
     }
@@ -95,7 +100,10 @@ pub fn main() !void {
     const options = try Options.init(&args);
 
     if (options.should_compile) {
-        try runCompiled(stdout.any(), options.files);
+        runCompiled(stdout.any(), options.files) catch |e| {
+            try bw.flush();
+            return e;
+        };
         try bw.flush();
     } else {
         run(stdout.any(), options.files) catch |e| {
