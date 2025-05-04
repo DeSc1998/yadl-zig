@@ -257,6 +257,66 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const dest = regs.destination;
             m.registers[dest] = m.value_stack.pop() orelse unreachable;
         },
+        .AccessRead => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+
+            switch (left) {
+                .array => |elements| {
+                    if (right != .number) {
+                        std.log.err("indexing in array: index is not a number: {s}", .{@tagName(right)});
+                        return Error.IllegalValue;
+                    }
+                    if (right.number != .integer) {
+                        std.log.err("indexing in array: index is not an integer: {s}", .{@tagName(right.number)});
+                        return Error.IllegalValue;
+                    }
+                    if (right.number.integer >= elements.len or right.number.integer < 0) {
+                        std.log.err("indexing in array: index is out of bounds: index = {}, size = {}", .{ right.number.integer, elements.len });
+                        return Error.IllegalValue;
+                    }
+                    m.registers[regs.destination] = elements[@intCast(right.number.integer)];
+                },
+                .dictionary => |dict| {
+                    if (dict.entries.get(right)) |out| {
+                        m.registers[regs.destination] = out;
+                    } else {
+                        m.registers[regs.destination] = .{ .none = null };
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        .AccessWrite => {
+            const regs = inst.argument.registers;
+            const dest = m.registers[regs.destination];
+            const left = m.registers[regs.source_left];
+            const right = m.registers[regs.source_right];
+
+            switch (dest) {
+                .array => |elements| {
+                    if (left != .number) {
+                        std.log.err("indexing in array: index is not a number: {s}", .{@tagName(left)});
+                        return Error.IllegalValue;
+                    }
+                    if (left.number != .integer) {
+                        std.log.err("indexing in array: index is not an integer: {s}", .{@tagName(left.number)});
+                        return Error.IllegalValue;
+                    }
+                    if (left.number.integer >= elements.len or left.number.integer < 0) {
+                        std.log.err("indexing in array: index is out of bounds: index = {}, size = {}", .{ left.number.integer, elements.len });
+                        return Error.IllegalValue;
+                    }
+                    const index: usize = @intCast(left.number.integer);
+                    elements[index] = right;
+                },
+                .dictionary => |*dict| {
+                    try dict.entries.put(left, right);
+                },
+                else => unreachable,
+            }
+        },
         else => {
             std.log.err("not implemented: execution of instruction: {s}", .{@tagName(inst.op_code)});
             return Error.NotImplemented;
