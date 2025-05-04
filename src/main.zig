@@ -21,18 +21,23 @@ fn readFile(alloc: std.mem.Allocator, filepath: []const u8) ![]const u8 {
 const Options = struct {
     files: []const []const u8,
     should_compile: bool,
+    dump_bytecode: bool,
 
     fn init(args: *std.process.ArgIterator) !Options {
         var files = std.ArrayList([]const u8).init(allocator);
         var should_compile = false;
+        var dump_bytecode = false;
         while (args.next()) |arg| {
             if (std.mem.endsWith(u8, arg, ".yadl")) {
                 try files.append(arg);
                 continue;
             }
-
             if (std.mem.eql(u8, arg, "--compile")) {
                 should_compile = true;
+                continue;
+            }
+            if (std.mem.eql(u8, arg, "-d")) {
+                dump_bytecode = true;
                 continue;
             }
             std.log.err("unable to process argument '{s}': {s}", .{ arg, "unsupported option" });
@@ -41,11 +46,12 @@ const Options = struct {
         return .{
             .files = try files.toOwnedSlice(),
             .should_compile = should_compile,
+            .dump_bytecode = dump_bytecode,
         };
     }
 };
 
-fn runCompiled(stdout: std.io.AnyWriter, files: []const []const u8) !void {
+fn runCompiled(stdout: std.io.AnyWriter, dump_bytes: bool, files: []const []const u8) !void {
     for (files) |filepath| {
         const input = readFile(allocator, filepath) catch |err| {
             try stdout.print("ERROR: reading file '{s}' failed: {}\n", .{ filepath, err });
@@ -55,9 +61,10 @@ fn runCompiled(stdout: std.io.AnyWriter, files: []const []const u8) !void {
         // try stdout.print("{s}\n", .{input});
 
         var out = try yadl.compile_source(input, allocator);
-        // for (out.main_program.instructions) |inst| {
-        //     try inst.dump(stdout);
-        // }
+        if (dump_bytes)
+            for (out.main_program.instructions) |inst| {
+                try inst.dump(stdout);
+            };
         try yadl.execute_source(out, stdout);
         out.deinit();
     }
@@ -100,7 +107,8 @@ pub fn main() !void {
     const options = try Options.init(&args);
 
     if (options.should_compile) {
-        runCompiled(stdout.any(), options.files) catch |e| {
+        const out = std.io.getStdOut().writer().any();
+        runCompiled(out, options.dump_bytecode, options.files) catch |e| {
             try bw.flush();
             return e;
         };

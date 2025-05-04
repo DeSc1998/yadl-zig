@@ -13,7 +13,7 @@ const Error = error{
 
 const Frame = struct {
     program: compiler.Program,
-    stack_ptr: usize,
+    stack_ptr: usize = 0,
 };
 
 const Maschine = struct {
@@ -35,12 +35,9 @@ pub fn execute_source(source: compiler.CompiledSource, stdout: std.io.AnyWriter)
     };
 
     while (!is_finished(&maschine)) {
-        const frame = &maschine.frame_stack.items[maschine.frame_stack.items.len - 1];
+        const frame = maschine.frame_stack.getLast();
         const instruction = frame.program.instructions[frame.stack_ptr];
         try execute_instruction(&maschine, instruction);
-        if (is_finished_frame(frame)) {
-            _ = maschine.frame_stack.pop();
-        }
     }
 
     maschine.value_stack.deinit();
@@ -223,6 +220,14 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 },
             }
         },
+        .Call => {
+            const addr = inst.argument.address;
+            const function = m.function_table[addr];
+            try m.frame_stack.append(.{
+                .program = function,
+            });
+            return;
+        },
         .CallStd => {
             const addr = inst.argument.address;
             const name = stdlib.builtins.keys()[addr];
@@ -377,8 +382,8 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             }
         },
         .Return => {
-            current_frame -= 1;
             _ = m.frame_stack.pop();
+            current_frame = m.frame_stack.items.len - 1;
         },
         .Jmp => {
             const addr = inst.argument.address;

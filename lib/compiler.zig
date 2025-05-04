@@ -226,6 +226,8 @@ fn compile_function(compiler: *Compiler, func: expression.Function) Error!u24 {
     for (func.body) |st| {
         try compile_statment(&tmp, st, .Local);
     }
+    if (tmp.main.items[tmp.main.items.len - 1].op_code != .Return)
+        try tmp.main.append(Instruction.address(.Return, 0));
     const prog = Program{
         .instructions = try tmp.main.toOwnedSlice(),
         .static_memory = try tmp.static_mem.toOwnedSlice(),
@@ -259,10 +261,10 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         try compiler.main.append(Instruction.register(.Not, 0, 0, null));
         const jmp_index = @as(u24, @truncate(compiler.main.items.len));
         try compiler.main.append(Instruction.address(.JmpOnFalse, 0));
-        // tmp_array = array_append(tmp_array, top)
-        try compiler.main.append(Instruction.register(.Pop, 4, null, null));
+        // tmp_array = array_append(tmp_array, tmp_arg)
+        try compiler.main.append(Instruction.register(.Pop, 3, null, null));
         try compiler.main.append(Instruction.register(.Push, 1, null, null));
-        try compiler.main.append(Instruction.register(.Push, 4, null, null));
+        try compiler.main.append(Instruction.register(.Push, 3, null, null));
         const addr = stdlib.builtins.getIndex("append") orelse unreachable;
         try compiler.main.append(Instruction.address(.CallStd, @as(u24, @truncate(addr))));
         try compiler.main.append(Instruction.register(.Move, 1, 0, null));
@@ -270,9 +272,9 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         const one = expression.Expression{ .value = .{ .number = .{ .integer = 1 } } };
         try compile_expression(compiler, &one, Compiler.var_offset - 1);
         try compiler.main.append(Instruction.register(.Sub, 2, 2, Compiler.var_offset - 1));
-        try compiler.main.append(Instruction.address(.Jmp, start_loop));
         const end_loop = @as(u24, @truncate(compiler.main.items.len));
         compiler.main.items[jmp_index].argument.address = end_loop;
+        try compiler.main.append(Instruction.address(.Jmp, start_loop));
         // }
 
         const reg = @as(u8, @truncate(compiler.var_table.count())) + Compiler.var_offset;
@@ -338,26 +340,29 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
                 try compile_statment(compiler, stmt, kind);
             }
             const finish_jmp_index = compiler.main.items.len;
+            const end_positive = @as(u24, @truncate(compiler.main.items.len));
+            compiler.main.items[negitive_jmp_index].argument.address = end_positive;
             try compiler.main.append(Instruction.address(.Jmp, 0));
-            compiler.main.items[negitive_jmp_index].argument.address = @as(u24, @truncate(compiler.main.items.len));
             if (branches.elseBranch) |elseB|
                 for (elseB) |stmt| {
                     try compile_statment(compiler, stmt, kind);
                 };
-            compiler.main.items[finish_jmp_index].argument.address = @as(u24, @truncate(compiler.main.items.len));
+            const end_if = @as(u24, @truncate(compiler.main.items.len - 1));
+            compiler.main.items[finish_jmp_index].argument.address = end_if;
         },
         .whileloop => |branches| {
             const condition = branches.loop.condition;
             const body = branches.loop.body;
-            const start_of_loop: u24 = @as(u24, @truncate(compiler.main.items.len));
+            const start_of_loop: u24 = @as(u24, @truncate(compiler.main.items.len - 1));
             try compile_expression(compiler, condition, 0);
             const negitive_jmp_index = compiler.main.items.len;
             try compiler.main.append(Instruction.address(.JmpOnFalse, 0));
             for (body) |stmt| {
                 try compile_statment(compiler, stmt, kind);
             }
+            const end_loop = @as(u24, @truncate(compiler.main.items.len));
+            compiler.main.items[negitive_jmp_index].argument.address = end_loop;
             try compiler.main.append(Instruction.address(.Jmp, start_of_loop));
-            compiler.main.items[negitive_jmp_index].argument.address = @as(u24, @truncate(compiler.main.items.len));
         },
     };
 }
