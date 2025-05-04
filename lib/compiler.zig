@@ -13,6 +13,7 @@ pub const Error = error{
     ToManyArguments,
     UndefinedVariable,
     IllegalReturn,
+    NonComptimeValue,
     ParserError,
 } || std.mem.Allocator.Error;
 
@@ -236,6 +237,15 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
             try compiler.main.append(Instruction.address(.Return, 0));
         },
         .functioncall => |fc| compile_function_call(compiler, fc, 0),
+        .struct_assignment => |sa| {
+            const strukt = sa.access;
+            const val = sa.value;
+            std.debug.assert(strukt.* == .struct_access);
+            try compile_expression(compiler, strukt.struct_access.strct, 0);
+            try compile_expression(compiler, strukt.struct_access.key, 1);
+            try compile_expression(compiler, val, 2);
+            try compiler.main.append(Instruction.register(.AccessWrite, 0, 1, 2));
+        },
         else => {
             std.log.err("not implemented: compiling statemant kind: {s}", .{@tagName(st)});
             break :sw Error.NotImplemented;
@@ -340,11 +350,86 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                 return Error.UndefinedVariable;
             }
         },
-        else => {
-            std.log.err("not implemented expression case: {s}", .{@tagName(expr.*)});
-            return Error.NotImplemented;
+        .array => |xs| {
+            if (!all_comptime_values(xs.elements)) {
+                std.log.err("array can not be evaluated at compile time", .{});
+                return Error.NonComptimeValue;
+            }
+            const tmp: []value.Value = try compiler.main.allocator.alloc(value.Value, xs.elements.len);
+            for (tmp, xs.elements) |*out, elem| {
+                out.* = try eval_expression(compiler.main.allocator, elem);
+            }
+            const array = value.Value{ .array = tmp };
+            const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
+            try compiler.static_mem.append(array);
+            try compiler.main.append(Instruction.address(.LoadStatic, addr));
+            if (target != 7) try compiler.main.append(Instruction.register(.Move, target, 7, null));
+        },
+        .dictionary => |dict| {
+            if (!all_comptime_entry(dict.entries)) {
+                std.log.err("dictionary can not be evaluated at compile time", .{});
+                return Error.NonComptimeValue;
+            }
+            var tmp = try value.Dictionary.empty(compiler.main.allocator);
+            for (dict.entries) |entry| {
+                const key = try eval_expression(compiler.main.allocator, entry.key.*);
+                const val = try eval_expression(compiler.main.allocator, entry.value.*);
+                try tmp.dictionary.entries.put(key, val);
+            }
+            const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
+            try compiler.static_mem.append(tmp);
+            try compiler.main.append(Instruction.address(.LoadStatic, addr));
+            if (target != 7) try compiler.main.append(Instruction.register(.Move, target, 7, null));
         },
     }
+}
+
+fn eval_expression(alloc: std.mem.Allocator, expr: expression.Expression) !value.Value {
+    switch (expr) {
+        .value => |v| return v,
+        .array => |array| {
+            const tmp: []value.Value = try alloc.alloc(value.Value, array.elements.len);
+            for (tmp, array.elements) |*out, elem| {
+                out.* = try eval_expression(alloc, elem);
+            }
+            return .{ .array = tmp };
+        },
+        .dictionary => |dict| {
+            var tmp = try value.Dictionary.empty(alloc);
+            for (dict.entries) |entry| {
+                const key = try eval_expression(alloc, entry.key.*);
+                const val = try eval_expression(alloc, entry.value.*);
+                try tmp.dictionary.entries.put(key, val);
+            }
+            return tmp;
+        },
+        else => unreachable,
+    }
+}
+
+fn is_comptime_value(v: expression.Expression) bool {
+    const is_value = v == .value;
+    const is_comptime_array = v == .array and all_comptime_values(v.array.elements);
+    const is_comptime_dict = v == .dictionary and all_comptime_entry(v.dictionary.entries);
+    return is_value or is_comptime_array or is_comptime_dict;
+}
+
+fn all_comptime_values(values: []const expression.Expression) bool {
+    for (values) |v| {
+        if (!is_comptime_value(v)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn all_comptime_entry(entries: []const expression.DictionaryEntry) bool {
+    for (entries) |e| {
+        if (!is_comptime_value(e.key.*) or !is_comptime_value(e.value.*)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn arithmetic_op_to_instruction(op: expression.ArithmeticOps) OpCode {
@@ -387,9 +472,24 @@ fn compile_binary_expression(
             expression.CompareOps.Less => compiler.main.append(
                 Instruction.register(.CmpLess, target, left, right),
             ),
-            else => |o| {
-                std.log.err("Not implemented: in 'compile_binary_expression': compare op {s}", .{@tagName(o)});
-                return Error.NotImplemented;
+            expression.CompareOps.Greater => {
+                try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
+                try compiler.main.append(Instruction.register(.CmpLess, left, left, right));
+                try compiler.main.append(Instruction.register(.And, target, target, left));
+                try compiler.main.append(Instruction.register(.Not, target, target, null));
+            },
+            expression.CompareOps.GreaterEqual => {
+                try compiler.main.append(Instruction.register(.CmpLess, target, left, right));
+                try compiler.main.append(Instruction.register(.Not, target, target, null));
+            },
+            expression.CompareOps.LessEqual => {
+                try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
+                try compiler.main.append(Instruction.register(.CmpLess, left, left, right));
+                try compiler.main.append(Instruction.register(.And, target, target, left));
+            },
+            expression.CompareOps.NotEqual => {
+                try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
+                try compiler.main.append(Instruction.register(.Not, target, target, null));
             },
         },
     };
