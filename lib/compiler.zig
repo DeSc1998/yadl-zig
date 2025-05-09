@@ -59,12 +59,13 @@ const OpCode = enum(u8) {
 
     Call, // NOTE: call arguments are expected to be on the stack
     CallStd, // NOTE: call arguments are expected to be on the stack
+    CallIntrinsic, // NOTE: call arguments are expected to be on the stack
     Return,
 };
 
 pub fn is_address_opcode(op: OpCode) bool {
     return switch (op) {
-        .Return, .JmpOnFalse, .Jmp, .LoadStatic, .Call, .CallStd => true,
+        .Return, .JmpOnFalse, .Jmp, .LoadStatic, .Call, .CallStd, .CallIntrinsic => true,
         else => false,
     };
 }
@@ -155,6 +156,40 @@ pub const CompiledSource = struct {
         self.allocator.free(self.functions);
         self.function_table.deinit();
     }
+
+    pub fn dump(self: CompiledSource, out: std.io.AnyWriter) !void {
+        for (self.functions, 0..) |f, offset| {
+            var iter = self.function_table.iterator();
+            var function_found = false;
+            while (iter.next()) |entry| {
+                if (entry.value_ptr.offset == offset) {
+                    try out.print("{s}@{}:\n", .{ entry.key_ptr.*, offset });
+                    function_found = true;
+                    break;
+                }
+            }
+            if (!function_found) {
+                try out.print("anonimous function@{}:\n", .{offset});
+            }
+            for (f.static_memory, 0..) |v, index| {
+                try out.print("memory@{}: {s}\n", .{ index, @tagName(v) });
+            }
+            for (f.instructions) |inst| {
+                try inst.dump(out);
+            }
+            if (self.functions.len - 1 > offset)
+                try out.print("------------------\n", .{});
+        }
+
+        try out.print("main program:\n", .{});
+        for (self.main_program.static_memory, 0..) |v, index| {
+            try out.print("memory@{}: {s}\n", .{ index, @tagName(v) });
+        }
+        try out.print("------------------\n", .{});
+        for (self.main_program.instructions) |inst| {
+            try inst.dump(out);
+        }
+    }
 };
 
 const Compiler = struct {
@@ -164,6 +199,7 @@ const Compiler = struct {
     function_table: FunctionTable,
     var_table: VariableTable,
     static_mem: std.ArrayList(value.Value),
+    stdlib: ?*CompiledSource = null,
 
     const var_offset: u8 = 8;
 
@@ -182,6 +218,7 @@ const Compiler = struct {
     fn local(self: *Compiler) Compiler {
         var tmp = Compiler.init(self.main.allocator);
         tmp.root = self;
+        tmp.stdlib = self.stdlib;
         return tmp;
     }
 
@@ -189,10 +226,58 @@ const Compiler = struct {
         return self.function_table.get(name) orelse if (self.root) |p| p.get_function(name) else null;
     }
 
+    fn get_stdlib_function(self: *Compiler, name: []const u8) ?FunctionData {
+        if (self.stdlib) |lib| {
+            return lib.function_table.get(name) orelse null;
+        } else return null;
+    }
+
     fn get_variable(self: *Compiler, name: []const u8) ?u8 {
         return self.var_table.get(name) orelse if (self.root) |p| p.get_variable(name) else null;
     }
+
+    fn is_local_function(self: *Compiler, name: []const u8) bool {
+        return if (self.function_table.get(name)) |_| true else false;
+    }
+
+    fn global_function_offset(self: Compiler) u24 {
+        if (self.root) |r| {
+            return r.global_function_offset() + @as(u24, @truncate(r.functions.items.len));
+        } else {
+            return 0;
+        }
+    }
 };
+
+pub var compiled_stdlib: ?*CompiledSource = null;
+
+pub fn compile_stdlib(allocator: std.mem.Allocator) Error!*CompiledSource {
+    if (compiled_stdlib) |lib| {
+        return lib;
+    } else {
+        const lib_source = @embedFile("stdlib.yadl");
+        var parser = Parser.init(lib_source, allocator);
+        const statements = parser.parse() catch |err| {
+            std.log.err("not implemented: handling of failed parsing: {}", .{err});
+            return Error.ParserError;
+        };
+        var compiler = Compiler.init(allocator);
+        try compile_program(&compiler, statements);
+        compiler.var_table.deinit();
+        const tmp = try allocator.create(CompiledSource);
+        tmp.* = .{
+            .allocator = allocator,
+            .main_program = .{
+                .instructions = try compiler.main.toOwnedSlice(),
+                .static_memory = try compiler.static_mem.toOwnedSlice(),
+            },
+            .functions = try compiler.functions.toOwnedSlice(),
+            .function_table = compiler.function_table,
+        };
+        compiled_stdlib = tmp;
+        return tmp;
+    }
+}
 
 pub fn compile_source(source: []const u8, allocator: std.mem.Allocator) Error!CompiledSource {
     var parser = Parser.init(source, allocator);
@@ -201,8 +286,10 @@ pub fn compile_source(source: []const u8, allocator: std.mem.Allocator) Error!Co
         return Error.ParserError;
     };
     var compiler = Compiler.init(allocator);
+    compiler.stdlib = try compile_stdlib(allocator);
     try compile_program(&compiler, statements);
     compiler.var_table.deinit();
+    // std.log.info("finished compiling", .{});
     return .{
         .allocator = allocator,
         .main_program = .{
@@ -232,6 +319,9 @@ fn compile_function(compiler: *Compiler, func: expression.Function) Error!u24 {
         .instructions = try tmp.main.toOwnedSlice(),
         .static_memory = try tmp.static_mem.toOwnedSlice(),
     };
+    const tmp_funcs = try tmp.functions.toOwnedSlice();
+    defer tmp.functions.allocator.free(tmp_funcs);
+    try compiler.functions.appendSlice(tmp_funcs);
     const offset: u24 = @as(u24, @truncate(compiler.functions.items.len));
     try compiler.functions.append(prog);
     return offset;
@@ -246,40 +336,47 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
 
     if (arity.var_args) |id| {
         const var_count = expression.Expression{ .value = .{ .number = .{ .integer = @intCast(arity.args.len) } } };
-        // layout(0..4): [compare_res, tmp_array, var_arg_count, tmp_arg]
+        const constant_two = expression.Expression{ .value = .{ .number = .{ .integer = 2 } } };
+        // layout(0..4): [compare_res, tmp_array, var_arg_count]
+        const compare_reg: u8 = 0;
+        const tmp_array_reg: u8 = 1;
+        const arg_count_reg: u8 = 2;
         // var_arg_count = total_var_count - named_var_count
         try compile_expression(compiler, &var_count, Compiler.var_offset - 1);
-        try compiler.main.append(Instruction.register(.Sub, 2, 0, Compiler.var_offset - 1));
+        try compiler.main.append(Instruction.register(.Sub, arg_count_reg, 0, Compiler.var_offset - 1));
         // tmp_array = []
         const empty_array = expression.Expression{ .value = .{ .array = &.{} } };
-        try compile_expression(compiler, &empty_array, 1);
+        try compile_expression(compiler, &empty_array, tmp_array_reg);
 
         const start_loop = @as(u24, @truncate(compiler.main.items.len));
         // while (var_arg_count != 0) {
         try compiler.main.append(Instruction.address(.LoadStatic, 0));
-        try compiler.main.append(Instruction.register(.CmpEq, 0, 2, Compiler.var_offset - 1));
-        try compiler.main.append(Instruction.register(.Not, 0, 0, null));
+        try compiler.main.append(
+            Instruction.register(.CmpEq, compare_reg, arg_count_reg, Compiler.var_offset - 1),
+        );
+        try compiler.main.append(Instruction.register(.Not, compare_reg, compare_reg, null));
         const jmp_index = @as(u24, @truncate(compiler.main.items.len));
         try compiler.main.append(Instruction.address(.JmpOnFalse, 0));
-        // tmp_array = array_append(tmp_array, tmp_arg)
-        try compiler.main.append(Instruction.register(.Pop, 3, null, null));
-        try compiler.main.append(Instruction.register(.Push, 1, null, null));
-        try compiler.main.append(Instruction.register(.Push, 3, null, null));
+        // tmp_array = append(tmp_array, tmp_arg)
+        try compiler.main.append(Instruction.register(.Push, tmp_array_reg, null, null));
+        try compile_expression(compiler, &constant_two, 0);
         const addr = stdlib.builtins.getIndex("append") orelse unreachable;
-        try compiler.main.append(Instruction.address(.CallStd, @as(u24, @truncate(addr))));
-        try compiler.main.append(Instruction.register(.Move, 1, 0, null));
+        try compiler.main.append(Instruction.address(.CallIntrinsic, @as(u24, @truncate(addr))));
+        try compiler.main.append(Instruction.register(.Move, tmp_array_reg, 0, null));
         // var_arg_count -= 1
         const one = expression.Expression{ .value = .{ .number = .{ .integer = 1 } } };
         try compile_expression(compiler, &one, Compiler.var_offset - 1);
-        try compiler.main.append(Instruction.register(.Sub, 2, 2, Compiler.var_offset - 1));
+        try compiler.main.append(
+            Instruction.register(.Sub, arg_count_reg, arg_count_reg, Compiler.var_offset - 1),
+        );
         const end_loop = @as(u24, @truncate(compiler.main.items.len));
         compiler.main.items[jmp_index].argument.address = end_loop;
-        try compiler.main.append(Instruction.address(.Jmp, start_loop));
+        try compiler.main.append(Instruction.address(.Jmp, start_loop - 1));
         // }
 
         const reg = @as(u8, @truncate(compiler.var_table.count())) + Compiler.var_offset;
         try compiler.var_table.put(id.name, reg);
-        try compiler.main.append(Instruction.register(.Move, reg, 1, null));
+        try compiler.main.append(Instruction.register(.Move, reg, tmp_array_reg, null));
     }
 }
 
@@ -320,7 +417,7 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
             try compile_expression(compiler, r.value, 0);
             try compiler.main.append(Instruction.address(.Return, 0));
         },
-        .functioncall => |fc| compile_function_call(compiler, fc, 0),
+        .functioncall => |fc| compile_function_call(compiler, fc, 1),
         .struct_assignment => |sa| {
             const strukt = sa.access;
             const val = sa.value;
@@ -370,6 +467,7 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
 fn compile_call_arguments(
     compiler: *Compiler,
     args: []const expression.Expression,
+    target: u8,
     context: stdlib.FunctionContext,
 ) Error!void {
     if (context.arity.has_variadics and context.arity.unnamed_count > args.len or context.arity.unnamed_count > args.len) {
@@ -379,46 +477,93 @@ fn compile_call_arguments(
         return Error.ToManyArguments;
     }
     for (0..args.len) |rev_index| {
-        try compile_expression(compiler, &args[args.len - 1 - rev_index], 0);
-        try compiler.main.append(Instruction.register(.Push, 0, null, null));
+        try compile_expression(compiler, &args[args.len - 1 - rev_index], target);
+        try compiler.main.append(Instruction.register(.Push, target, null, null));
     }
     const tmp = expression.Expression{ .value = .{ .number = .{ .integer = @intCast(args.len) } } };
     try compile_expression(compiler, &tmp, 0);
 }
 
 fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, target: u8) Error!void {
+    if (target != 0)
+        try compiler.main.append(Instruction.register(.Push, 0, null, null));
+
     if (fc.func.* != .identifier) {
-        std.log.err("not implemented: function call, non identifier case ", .{});
-        return Error.NotImplemented;
+        // NOTE: it is assumed that the expression is a compiled function
+        const context: stdlib.FunctionContext = .{
+            .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
+            .arity = .{
+                .unnamed_count = @truncate(fc.args.len),
+                .has_variadics = false,
+            },
+        };
+        try compile_call_arguments(compiler, fc.args, target, context);
+        try compile_expression(compiler, fc.func, target);
+        try compiler.main.append(Instruction.register(.CallValue, 0, target, 0));
+        return;
     }
 
-    if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
-        const context = stdlib.builtins.get(fc.func.identifier.name) orelse unreachable;
-        try compile_call_arguments(compiler, fc.args, context);
-        try compiler.main.append(Instruction.address(.CallStd, @as(u24, @truncate(addr))));
-    } else {
-        const data = compiler.get_function(fc.func.identifier.name) orelse return Error.UndefinedFunction;
+    if (compiler.get_stdlib_function(fc.func.identifier.name)) |data| {
         const addr = data.offset;
-        try compile_call_arguments(compiler, fc.args, .{
+        const context: stdlib.FunctionContext = .{
+            .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
+            .arity = .{
+                .unnamed_count = @truncate(data.arity.args.len),
+                .has_variadics = if (data.arity.var_args) |_| true else false,
+            },
+        };
+        try compile_call_arguments(compiler, fc.args, target, context);
+        try compiler.main.append(Instruction.address(.CallStd, @as(u24, @truncate(addr))));
+        unreachable;
+    } else if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
+        const context = stdlib.builtins.get(fc.func.identifier.name) orelse unreachable;
+        try compile_call_arguments(compiler, fc.args, target, context);
+        try compiler.main.append(Instruction.address(.CallIntrinsic, @as(u24, @truncate(addr))));
+    } else if (compiler.get_function(fc.func.identifier.name)) |data| {
+        const addr = data.offset;
+        try compile_call_arguments(compiler, fc.args, target, .{
             .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
             .arity = .{
                 .unnamed_count = @as(u32, @truncate(data.arity.args.len)),
                 .has_variadics = if (data.arity.var_args) |_| true else false,
             },
         });
+        // const offset: u24 = compiler.global_function_offset();
+        // try compiler.main.append(Instruction.address(.Call, addr + offset));
         try compiler.main.append(Instruction.address(.Call, addr));
+    } else {
+        // NOTE: for this branch we have no idea about the value that is called because it is not traced
+        const reg = compiler.get_variable(fc.func.identifier.name) orelse return Error.UndefinedFunction;
+        try compile_call_arguments(compiler, fc.args, target, .{
+            .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
+            .arity = .{
+                .unnamed_count = @as(u32, @truncate(fc.args.len)),
+                .has_variadics = false,
+            },
+        });
+        try compiler.main.append(Instruction.register(.CallValue, 0, reg, target));
     }
     if (target != 0) {
         try compiler.main.append(Instruction.register(.Move, target, 0, null));
+        try compiler.main.append(Instruction.register(.Pop, 0, null, null));
     }
 }
 
 fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, target: u8) Error!void {
     switch (expr.*) {
         .value => |v| {
-            for (compiler.static_mem.items, 0..) |val, index| {
+            const val: value.Value = if (v == .function) b: {
+                const offset = try compile_function(compiler, v.function);
+                const cf = value.CompiledFunction{
+                    .function_address = offset,
+                    .arity = v.function.arity,
+                };
+                break :b .{ .compiled_function = cf };
+            } else v;
+
+            for (compiler.static_mem.items, 0..) |tmp, index| {
                 const addr = @as(u24, @truncate(index));
-                if (val.eql(v)) {
+                if (tmp.eql(val)) {
                     try compiler.main.append(Instruction.address(.LoadStatic, addr));
                     if (target != Compiler.var_offset - 1) try compiler.main.append(
                         Instruction.register(.Move, target, Compiler.var_offset - 1, null),
@@ -427,7 +572,7 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                 }
             }
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
-            try compiler.static_mem.append(v);
+            try compiler.static_mem.append(val);
             try compiler.main.append(Instruction.address(.LoadStatic, addr));
             if (target != Compiler.var_offset - 1) try compiler.main.append(
                 Instruction.register(.Move, target, Compiler.var_offset - 1, null),

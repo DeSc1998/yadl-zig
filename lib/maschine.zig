@@ -13,6 +13,7 @@ const Error = error{
 
 const Frame = struct {
     program: compiler.Program,
+    variable_snapshot: [std.math.maxInt(u8) + 1 - 8]value.Value = undefined,
     stack_ptr: usize = 0,
 };
 
@@ -223,16 +224,54 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Call => {
             const addr = inst.argument.address;
             const function = m.function_table[addr];
+            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
+            const source = m.registers[8..];
+            @memcpy(target, source);
             try m.frame_stack.append(.{
                 .program = function,
             });
             return;
         },
+        .CallValue => {
+            const regs = inst.argument.registers;
+            const func = m.registers[regs.source_left];
+            if (regs.source_right != 0)
+                m.registers[0] = m.registers[regs.source_right];
+            if (func != .compiled_function) {
+                std.log.err("called value is not a compiled function: type was '{s}'", .{@tagName(func)});
+                return Error.IllegalValue;
+            }
+            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
+            const source = m.registers[8..];
+            @memcpy(target, source);
+            try m.frame_stack.append(.{
+                .program = m.function_table[func.compiled_function.function_address],
+            });
+            return;
+        },
         .CallStd => {
+            const addr = inst.argument.address;
+            const function = compiler.compiled_stdlib.?.functions[addr];
+            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
+            const source = m.registers[8..];
+            @memcpy(target, source);
+            try m.frame_stack.append(.{
+                .program = function,
+            });
+            return;
+        },
+        .CallIntrinsic => {
             const addr = inst.argument.address;
             const name = stdlib.builtins.keys()[addr];
             const context = stdlib.builtins.get(name) orelse unreachable;
-            std.debug.assert(m.registers[0] == .number);
+            if (m.registers[0] != .number) {
+                std.log.err("argument count is not a number: type was {s}", .{@tagName(m.registers[0])});
+                std.log.err("current stack ptr: {}, inst count: {}", .{
+                    m.frame_stack.items[current_frame].stack_ptr,
+                    m.frame_stack.items[current_frame].program.instructions.len,
+                });
+                return Error.IllegalValue;
+            }
             const size: usize = @intCast(m.registers[0].number.integer);
             const tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
             defer m.value_stack.allocator.free(tmp);
@@ -384,6 +423,9 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Return => {
             _ = m.frame_stack.pop();
             current_frame = m.frame_stack.items.len - 1;
+            const source = m.frame_stack.items[current_frame].variable_snapshot[0..];
+            const target = m.registers[8..];
+            @memcpy(target, source);
         },
         .Jmp => {
             const addr = inst.argument.address;
@@ -396,10 +438,6 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             if (!condition.boolean) {
                 m.frame_stack.items[current_frame].stack_ptr = addr;
             }
-        },
-        else => {
-            std.log.err("not implemented: execution of instruction: {s}", .{@tagName(inst.op_code)});
-            return Error.NotImplemented;
         },
     }
     m.frame_stack.items[current_frame].stack_ptr += 1;
