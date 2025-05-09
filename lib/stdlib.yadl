@@ -1,0 +1,21 @@
+
+// Map implementation
+map_ = (items, func) => {
+    if (type(items) == 'array') {
+        index = 0
+        out = append([], items)
+        while (index < len(items)) {
+            out[index] = func(items[index])
+            index = index + 1
+        }
+        return out
+    } else {
+        return func(items)
+    }
+}
+
+filter_ = (items, pred) => {
+    if (type(items) == 'array') {
+        size = count(items, pred)
+    }
+}
