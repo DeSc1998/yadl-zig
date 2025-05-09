@@ -52,7 +52,9 @@ pub fn length(args: libtype.CallMatch, scope: *Scope) Error!void {
 
 pub fn _type(args: libtype.CallMatch, scope: *Scope) Error!void {
     std.log.info("in type: was '{s}'", .{@tagName(args.unnamed_args[0])});
-    scope.return_result =
+    if (args.unnamed_args[0] == .compiled_function) {
+        scope.return_result = .{ .string = "function" };
+    } else scope.return_result =
         .{ .string = @tagName(args.unnamed_args[0]) };
 }
 
@@ -1188,6 +1190,14 @@ fn printValue(value: Value, scope: *Scope) Error!void {
         },
         .iterator => {
             scope.out.print("<{s}>", .{@tagName(value)}) catch return Error.IOWrite;
+        },
+        .compiled_function => |cf| {
+            scope.out.print("<{s}@{}, arity: (args: {}, var_args: {})>", .{
+                @tagName(value),
+                cf.function_address,
+                cf.arity.args.len,
+                if (cf.arity.var_args) |_| true else false,
+            }) catch return Error.IOWrite;
         },
         .none => _ = scope.out.write("none") catch return Error.IOWrite,
         else => |v| {
