@@ -62,9 +62,7 @@ fn runCompiled(stdout: std.io.AnyWriter, dump_bytes: bool, files: []const []cons
 
         var out = try yadl.compile_source(input, allocator);
         if (dump_bytes)
-            for (out.main_program.instructions) |inst| {
-                try inst.dump(stdout);
-            };
+            try out.dump(stdout);
         try yadl.execute_source(out, stdout);
         out.deinit();
     }
