@@ -200,6 +200,7 @@ const Compiler = struct {
     var_table: VariableTable,
     static_mem: std.ArrayList(value.Value),
     stdlib: ?*CompiledSource = null,
+    compiles_stdlib: bool = false,
 
     const var_offset: u8 = 8;
 
@@ -219,6 +220,7 @@ const Compiler = struct {
         var tmp = Compiler.init(self.main.allocator);
         tmp.root = self;
         tmp.stdlib = self.stdlib;
+        tmp.compiles_stdlib = self.compiles_stdlib;
         return tmp;
     }
 
@@ -262,6 +264,7 @@ pub fn compile_stdlib(allocator: std.mem.Allocator) Error!*CompiledSource {
             return Error.ParserError;
         };
         var compiler = Compiler.init(allocator);
+        compiler.compiles_stdlib = true;
         try compile_program(&compiler, statements);
         compiler.var_table.deinit();
         const tmp = try allocator.create(CompiledSource);
@@ -315,6 +318,13 @@ fn compile_function(compiler: *Compiler, func: expression.Function) Error!u24 {
     }
     if (tmp.main.items[tmp.main.items.len - 1].op_code != .Return)
         try tmp.main.append(Instruction.address(.Return, 0));
+    if (tmp.compiles_stdlib) {
+        for (tmp.main.items) |*inst| {
+            if (inst.op_code == .Call) {
+                inst.op_code = .CallStd;
+            }
+        }
+    }
     const prog = Program{
         .instructions = try tmp.main.toOwnedSlice(),
         .static_memory = try tmp.static_mem.toOwnedSlice(),
