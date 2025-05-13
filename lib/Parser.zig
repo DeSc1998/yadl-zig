@@ -626,8 +626,6 @@ fn parseIfStatement(self: *Self, kind: IfKind) Error!stmt.Statement {
     errdefer self.allocator.free(branch.body);
     errdefer for (branch.body) |st| stmt.free(self.allocator, st);
 
-    _ = self.expect(.Newline, null) catch {};
-
     if (self.expect(.Keyword, "elif")) |_| {
         const tmp = try self.parseIfStatement(.follow_up_branch);
         const stmts = try self.allocator.alloc(stmt.Statement, 1);

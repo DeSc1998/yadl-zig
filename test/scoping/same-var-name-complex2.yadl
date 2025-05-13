@@ -3,8 +3,7 @@
 x = (x) => {
     if (type(x) == "function") {
         return x("technisch")
-    }
-    else {
+    } else {
         return string(x) + " unmöglich"
     }
 }
