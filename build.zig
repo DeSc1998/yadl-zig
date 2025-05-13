@@ -119,6 +119,23 @@ pub fn build(b: *std.Build) void {
     addBinary(b, release_step, .linux, .x86_64, .ReleaseFast);
     addBinary(b, release_step, .windows, .x86_64, .ReleaseFast);
     addBinary(b, release_step, .macos, .aarch64, .ReleaseFast);
+
+    if (findPytest(b)) |path| {
+        const pytest_step = b.step("pytest", "Run pytest with arguments");
+        var args = std.ArrayList([]const u8).init(b.allocator);
+        args.append(path) catch @panic("OOM");
+        if (b.args) |arguments|
+            args.appendSlice(arguments) catch @panic("OOM");
+        const pytest_command = b.addSystemCommand(args.items);
+        pytest_step.dependOn(b.getInstallStep());
+        pytest_step.dependOn(&pytest_command.step);
+    }
+}
+
+fn findPytest(b: *std.Build) ?[]const u8 {
+    if (b.findProgram(&.{"pytest"}, &.{})) |path| {
+        return path;
+    } else |_| return null;
 }
 
 fn addBinary(
