@@ -5,6 +5,7 @@ configurations, file_names = load_configs(
     "test/control_flow", is_compiled=True)
 
 
+@pytest.mark.timeout(10)
 @pytest.mark.parametrize("config", configurations, ids=file_names)
 def test_config(config):
     run_test(config)
