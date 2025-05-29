@@ -20,3 +20,4 @@ test-save-json.json
 test-save.csv
 release_hashes.sh
 zig-cache
+dump_source.txt
