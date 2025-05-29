@@ -22,11 +22,13 @@ const Options = struct {
     files: []const []const u8,
     should_compile: bool,
     dump_bytecode: bool,
+    dump_to_file: bool,
 
     fn init(args: *std.process.ArgIterator) !Options {
         var files = std.ArrayList([]const u8).init(allocator);
         var should_compile = false;
         var dump_bytecode = false;
+        var dump_to_file = false;
         while (args.next()) |arg| {
             if (std.mem.endsWith(u8, arg, ".yadl")) {
                 try files.append(arg);
@@ -40,6 +42,10 @@ const Options = struct {
                 dump_bytecode = true;
                 continue;
             }
+            if (std.mem.eql(u8, arg, "--dump-to-file")) {
+                dump_to_file = true;
+                continue;
+            }
             std.log.err("unable to process argument '{s}': {s}", .{ arg, "unsupported option" });
             return error.UnsupportedOption;
         }
@@ -47,22 +53,31 @@ const Options = struct {
             .files = try files.toOwnedSlice(),
             .should_compile = should_compile,
             .dump_bytecode = dump_bytecode,
+            .dump_to_file = dump_to_file,
         };
     }
 };
 
-fn runCompiled(stdout: std.io.AnyWriter, dump_bytes: bool, files: []const []const u8) !void {
-    for (files) |filepath| {
+fn runCompiled(stdout: std.io.AnyWriter, options: Options) !void {
+    for (options.files) |filepath| {
         const input = readFile(allocator, filepath) catch |err| {
             try stdout.print("ERROR: reading file '{s}' failed: {}\n", .{ filepath, err });
             continue;
         };
 
-        // try stdout.print("{s}\n", .{input});
-
         var out = try yadl.compile_source(input, allocator);
-        if (dump_bytes)
-            try out.dump(stdout);
+        if (options.dump_bytecode) {
+            const dump_file = if (options.dump_to_file)
+                try std.fs.cwd().createFile("dump_source.txt", .{})
+            else
+                std.io.getStdErr();
+
+            const tmp_writer = dump_file.writer();
+            _ = try tmp_writer.write("--- stdlib ---\n");
+            try yadl.compiled_sources.?.items[0].dump(dump_file);
+            _ = try tmp_writer.write("--------------\n");
+            try out.dump(dump_file);
+        }
         try yadl.execute_source(out, stdout);
         out.deinit();
     }
@@ -106,7 +121,7 @@ pub fn main() !void {
 
     if (options.should_compile) {
         const out = std.io.getStdOut().writer().any();
-        runCompiled(out, options.dump_bytecode, options.files) catch |e| {
+        runCompiled(out, options) catch |e| {
             try bw.flush();
             return e;
         };

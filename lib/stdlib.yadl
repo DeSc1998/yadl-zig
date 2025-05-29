@@ -1,11 +1,20 @@
 
+array_init = (size) => {
+    out = []
+    while (len(out) < size) {
+        out = append(out, 0)
+    }
+    return out
+}
+
 // Map implementation
-map_ = (items, func) => {
+map = (items, func) => {
     if (type(items) == 'array') {
         index = 0
         out = append([], items)
-        while (index < len(items)) {
-            out[index] = func(items[index])
+        while (index < len(out)) {
+            tmp = func(out[index])
+            out[index] = tmp
             index = index + 1
         }
         return out
@@ -14,8 +23,125 @@ map_ = (items, func) => {
     }
 }
 
-filter_ = (items, pred) => {
+flatten = (items) => {
     if (type(items) == 'array') {
-        size = count(items, pred)
+        out = []
+        index = 0
+        while (index < len(items)) {
+            out = append(out, items[index])
+            index = index + 1
+        }
+        return out
+    } else {
+        return items
     }
 }
+
+flatmap = (items, func) => {
+    tmp = map(items, func)
+    return flatten(tmp)
+}
+
+filter = (items, pred) => {
+    if (type(items) == 'array') {
+        index = 0
+        out = []
+        while (index < len(items)) {
+            if (pred(items[index])) {
+                out = append(out, items[index])
+            }
+            index = index + 1
+        }
+        return out
+    } else {
+        return items
+    }
+}
+
+reduce = (items, func) => {
+    if (type(items) == 'array') {
+        acc = items[0]
+        index = 1
+        while (index < len(items)) {
+            acc = func(acc, items[index])
+            index = index + 1
+        }
+        return acc
+    } else {
+        return items
+    }
+}
+
+equal_key = (groupper, item, key) => {
+    tmp = groupper(item)
+    return tmp == key
+}
+
+group_by = (items, groupper) => {
+    out = {}
+    if (type(items) == 'array') {
+        index = 0
+        while (index < len(items)) {
+            key = groupper(items[index])
+            if (out[key] == none) {
+                out[key] = filter(items, (x) => equal_key(groupper, x, key))
+            }
+            index = index + 1
+        }
+        return out
+    } else {
+        return items
+    }
+}
+
+// NOTE: `items` is assumed to be an array
+swap = (items, left, right) => {
+    tmp = items[left]
+    items[left] = items[right]
+    items[right] = tmp
+}
+
+// NOTE: `items` is assumed to be an array
+partition = (items, compare) => {
+    pivot = len(items) - 1
+    left = 0
+    while (left < pivot) {
+        l = items[left]
+        p = items[pivot]
+        if (compare(l, p)) {
+            left = left + 1
+        } else {
+            swap(items, left, pivot)
+            if (left != pivot - 1) {
+                swap(items, left, pivot - 1)
+            }
+            pivot = pivot - 1
+        }
+    }
+    return pivot
+}
+
+// NOTE: `items` is assumed to be an array
+sort_implementation = (items, compare) => {
+    count = len(items)
+    if (count < 2) {
+        return none
+    }
+
+    partition_point = partition(items, compare)
+    left = take(items, partition_point)
+    sort_implementation(left, compare)
+    right = drop(items, partition_point)
+    sort_implementation(right, compare)
+}
+
+
+sort = (items, compare) => {
+    if (type(items) != 'array') {
+        return none
+    }
+    sort_implementation(items, compare)
+    return items
+}
+
+call = (source, function_name, args...) => none

@@ -46,6 +46,15 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    const run_dump_cmd = b.addRunArtifact(exe);
+    const run_dump_step = b.step("run-fulldump", "Run the app with dumped disassembled bytecode");
+    run_dump_step.dependOn(&run_dump_cmd.step);
+    run_dump_cmd.addArg("-d");
+    run_dump_cmd.addArg("--dump-to-file");
+    if (b.args) |args| {
+        run_dump_cmd.addArgs(args);
+    }
+
     const lsp_cmd = b.addRunArtifact(lsp_server);
     lsp_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {

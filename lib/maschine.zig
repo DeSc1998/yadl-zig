@@ -13,7 +13,6 @@ const Error = error{
 
 const Frame = struct {
     program: compiler.Program,
-    variable_snapshot: [std.math.maxInt(u8) + 1 - 8]value.Value = undefined,
     stack_ptr: usize = 0,
 };
 
@@ -57,10 +56,26 @@ fn is_finished_frame(f: *const Frame) bool {
 
 fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
     var current_frame = m.frame_stack.items.len - 1;
+    // if (compiler.is_address_opcode(inst.op_code)) {
+    //     std.log.info("executing @ {:<4} {s:<10} {}", .{
+    //         m.frame_stack.items[current_frame].stack_ptr,
+    //         @tagName(inst.op_code),
+    //         inst.argument.address,
+    //     });
+    // } else {
+    //     std.log.info("executing @ {:<4} {s:<10} {} <- {} {}", .{
+    //         m.frame_stack.items[current_frame].stack_ptr,
+    //         @tagName(inst.op_code),
+    //         inst.argument.registers.destination,
+    //         inst.argument.registers.source_left,
+    //         inst.argument.registers.source_right,
+    //     });
+    // }
     switch (inst.op_code) {
-        .LoadStatic => {
+        .Load => {
             const addr = inst.argument.address;
-            m.registers[7] = m.frame_stack.items[current_frame].program.static_memory[addr];
+            // NOTE: load address: `Compiler.load_address` (see compiler.zig)
+            m.registers[255] = m.frame_stack.items[current_frame].program.memory[addr];
         },
         .Move => {
             const regs = inst.argument.registers;
@@ -77,6 +92,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not multiply '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.mul(right.number) };
@@ -86,6 +102,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not multiply left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -101,6 +118,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not apply modulo to '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.mod(right.number) };
@@ -110,6 +128,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not apply modulo to left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -125,6 +144,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not divide '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.div(right.number) };
@@ -134,6 +154,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not divide left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -149,6 +170,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not exponatiate '{s}' to '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.expo(right.number) };
@@ -158,6 +180,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not exponatiate left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -173,6 +196,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not add '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.add(right.number) };
@@ -183,6 +207,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not add '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     const res = try std.mem.join(m.frame_stack.allocator, "", &.{ l, right.string });
@@ -193,6 +218,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not add left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -208,6 +234,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                             "can not subtract '{s}' and '{s}': implicit conversion not allowed",
                             .{ @tagName(left), @tagName(right) },
                         );
+                        try print_trace(m);
                         return Error.IllegalValue;
                     }
                     m.registers[regs.destination] = .{ .number = l.sub(right.number) };
@@ -217,6 +244,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         "can not subtract left-side '{s}': implicit conversion not allowed",
                         .{@tagName(val)},
                     );
+                    try print_trace(m);
                     return Error.IllegalValue;
                 },
             }
@@ -224,9 +252,6 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Call => {
             const addr = inst.argument.address;
             const function = m.function_table[addr];
-            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
-            const source = m.registers[8..];
-            @memcpy(target, source);
             try m.frame_stack.append(.{
                 .program = function,
             });
@@ -237,24 +262,22 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const func = m.registers[regs.source_left];
             if (regs.source_right != 0)
                 m.registers[0] = m.registers[regs.source_right];
-            if (func != .compiled_function) {
+            if (func != .function_pointer) {
                 std.log.err("called value is not a compiled function: type was '{s}'", .{@tagName(func)});
+                try print_trace(m);
                 return Error.IllegalValue;
             }
-            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
-            const source = m.registers[8..];
-            @memcpy(target, source);
+            const pointer = func.function_pointer;
+            const sources = compiler.compiled_sources orelse unreachable;
+            const source = &sources.items[pointer.source_address];
             try m.frame_stack.append(.{
-                .program = m.function_table[func.compiled_function.function_address],
+                .program = source.functions[pointer.function_address],
             });
             return;
         },
         .CallStd => {
             const addr = inst.argument.address;
-            const function = compiler.compiled_stdlib.?.functions[addr];
-            const target = m.frame_stack.items[current_frame].variable_snapshot[0..];
-            const source = m.registers[8..];
-            @memcpy(target, source);
+            const function = compiler.compiled_sources.?.items[0].functions[addr];
             try m.frame_stack.append(.{
                 .program = function,
             });
@@ -270,6 +293,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     m.frame_stack.items[current_frame].stack_ptr,
                     m.frame_stack.items[current_frame].program.instructions.len,
                 });
+                try print_trace(m);
                 return Error.IllegalValue;
             }
             const size: usize = @intCast(m.registers[0].number.integer);
@@ -303,6 +327,12 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     m.registers[regs.destination] = .{ .boolean = result.float < 0 };
                 }
             } else {
+                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                std.log.err("Illegal compare less @ sp = {}, f = {}", .{
+                    stack_ptr,
+                    current_frame,
+                });
+                try print_trace(m);
                 std.log.err("unable to compare under less: {s} and {s}", .{ @tagName(left), @tagName(right) });
                 return Error.IllegalValue;
             }
@@ -343,17 +373,18 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     stack_ptr,
                     current_frame,
                 });
-                const stderr = std.io.getStdErr().writer();
+                const stderr = std.io.getStdErr();
+                const writer = stderr.writer();
                 const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
                 for (0..10) |index| {
                     const current = base + index;
                     const i = m.frame_stack.items[current_frame].program.instructions[current];
                     if (current == stack_ptr) {
-                        stderr.print("------ current instruction -------\n", .{}) catch unreachable;
+                        writer.print("------ current instruction -------\n", .{}) catch unreachable;
                     }
-                    i.dump(stderr.any()) catch unreachable;
+                    i.dump(stderr, current) catch unreachable;
                     if (current == stack_ptr) {
-                        stderr.print("----------------------------------\n", .{}) catch unreachable;
+                        writer.print("----------------------------------\n", .{}) catch unreachable;
                     }
                 }
                 std.log.err("------------------------------", .{});
@@ -423,13 +454,11 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Return => {
             _ = m.frame_stack.pop();
             current_frame = m.frame_stack.items.len - 1;
-            const source = m.frame_stack.items[current_frame].variable_snapshot[0..];
-            const target = m.registers[8..];
-            @memcpy(target, source);
         },
         .Jmp => {
             const addr = inst.argument.address;
             m.frame_stack.items[current_frame].stack_ptr = addr;
+            return;
         },
         .JmpOnFalse => {
             const addr = inst.argument.address;
@@ -437,8 +466,69 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             std.debug.assert(condition == .boolean);
             if (!condition.boolean) {
                 m.frame_stack.items[current_frame].stack_ptr = addr;
+                return;
             }
         },
+        .Write => {
+            const regs = inst.argument.registers;
+            const dest = m.registers[regs.destination];
+            const left = m.registers[regs.source_left];
+            std.debug.assert(dest == .address);
+            m.frame_stack.items[current_frame].program.memory[dest.address] = left;
+        },
+        .Read => {
+            const regs = inst.argument.registers;
+            const left = m.registers[regs.source_left];
+            std.debug.assert(left == .address);
+            if (m.frame_stack.items[current_frame].program.memory.len > left.address) {
+                const tmp = m.frame_stack.items[current_frame].program.memory[left.address];
+                m.registers[regs.destination] = tmp;
+            } else {
+                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                std.log.err("accessed out of bound: memory size: {}, address: {}", .{
+                    m.frame_stack.items[current_frame].program.memory.len,
+                    left.address,
+                });
+                std.log.err("stack was empty @ sp = {}, f = {}", .{
+                    stack_ptr,
+                    current_frame,
+                });
+                try print_trace(m);
+                return Error.IllegalValue;
+            }
+        },
+        .Capture, .ReadCapture => return Error.NotImplemented,
     }
     m.frame_stack.items[current_frame].stack_ptr += 1;
+}
+
+fn print_trace(m: *Maschine) !void {
+    const frame = m.frame_stack.items[m.frame_stack.items.len - 1];
+    const stack_ptr = frame.stack_ptr;
+    const stderr = std.io.getStdErr();
+    const writer = stderr.writer();
+    const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
+    const total_instructions = frame.program.instructions.len;
+    const view_size: usize = @min(10, @max(total_instructions - base, 0));
+    writer.print("---- instruction view -----------\n", .{}) catch unreachable;
+    for (0..view_size) |index| {
+        const current = base + index;
+        const i = frame.program.instructions[current];
+        if (current == stack_ptr) {
+            writer.print("---- current instruction ----\n", .{}) catch unreachable;
+        }
+        i.dump(stderr, current) catch unreachable;
+        if (current == stack_ptr) {
+            writer.print("-----------------------------\n", .{}) catch unreachable;
+        }
+    }
+    writer.print("---------------------------------\n", .{}) catch unreachable;
+    writer.print("---- registers ------------------\n", .{}) catch unreachable;
+    for (m.registers[0..16], 0..) |reg, index| {
+        writer.print("reg@{}: {s} ", .{ index, @tagName(reg) }) catch unreachable;
+        var scope = Scope.empty(m.frame_stack.allocator, writer.any());
+        stdlib.functions.printValue(reg, &scope) catch unreachable;
+        _ = stderr.write("\n") catch unreachable;
+    }
+    writer.print("---------------------------------\n", .{}) catch unreachable;
 }

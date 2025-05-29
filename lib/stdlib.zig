@@ -2,7 +2,7 @@ const std = @import("std");
 
 const expression = @import("expression.zig");
 pub const libtype = @import("stdlib/type.zig");
-const functions = @import("stdlib/functions.zig");
+pub const functions = @import("stdlib/functions.zig");
 pub const conversions = @import("stdlib/conversions.zig");
 const Scope = @import("Scope.zig");
 
@@ -55,6 +55,8 @@ const mappings = .{
     .{ "last", FunctionContext{ .function = &functions.last, .arity = .{ .unnamed_count = 3 } } },
     .{ "first", FunctionContext{ .function = &functions.first, .arity = .{ .unnamed_count = 3 } } },
     .{ "type", FunctionContext{ .function = &functions._type, .arity = .{ .unnamed_count = 1 } } },
+    .{ "take", FunctionContext{ .function = &functions.take, .arity = .{ .unnamed_count = 2 } } },
+    .{ "drop", FunctionContext{ .function = &functions.drop, .arity = .{ .unnamed_count = 2 } } },
     // conversions
     .{ "bool", FunctionContext{ .function = &conversions.toBoolean, .arity = .{ .unnamed_count = 1 } } },
     .{ "number", FunctionContext{ .function = &conversions.toNumber, .arity = .{ .unnamed_count = 1 } } },
@@ -68,19 +70,19 @@ const mappings = .{
     .{ "starts_with", FunctionContext{ .function = &functions.string_starts_with, .arity = .{ .unnamed_count = 2 } } },
     .{ "ends_with", FunctionContext{ .function = &functions.string_ends_with, .arity = .{ .unnamed_count = 2 } } },
     // data stream functions
-    .{ "map", FunctionContext{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
+    // .{ "map", FunctionContext{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
     // NOTE: do function uses map. This might not be intended
     .{ "do", FunctionContext{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
-    .{ "flatmap", FunctionContext{ .function = &functions.flatmap, .arity = .{ .unnamed_count = 2 } } },
+    // .{ "flatmap", FunctionContext{ .function = &functions.flatmap, .arity = .{ .unnamed_count = 2 } } },
     .{ "zip", FunctionContext{ .function = &functions.zip, .arity = .{ .unnamed_count = 2 } } },
-    .{ "flatten", FunctionContext{ .function = &functions.flatten, .arity = .{ .unnamed_count = 1 } } },
-    .{ "reduce", FunctionContext{ .function = &functions.reduce, .arity = .{ .unnamed_count = 2 } } },
-    .{ "group_by", FunctionContext{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
+    // .{ "flatten", FunctionContext{ .function = &functions.flatten, .arity = .{ .unnamed_count = 1 } } },
+    // .{ "reduce", FunctionContext{ .function = &functions.reduce, .arity = .{ .unnamed_count = 2 } } },
+    // .{ "group_by", FunctionContext{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
     .{ "count", FunctionContext{ .function = &functions.count, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_all", FunctionContext{ .function = &functions.check_all, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_any", FunctionContext{ .function = &functions.check_any, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_none", FunctionContext{ .function = &functions.check_none, .arity = .{ .unnamed_count = 2 } } },
-    .{ "filter", FunctionContext{ .function = &functions.filter, .arity = .{ .unnamed_count = 2 } } },
+    // .{ "filter", FunctionContext{ .function = &functions.filter, .arity = .{ .unnamed_count = 2 } } },
     .{ "load", FunctionContext{ .function = &functions.load_data, .arity = .{ .unnamed_count = 2 } } },
     .{ "save", FunctionContext{ .function = &functions.save_data, .arity = .{ .unnamed_count = 3 } } },
     .{ "sort", FunctionContext{ .function = &functions.sort, .arity = .{ .unnamed_count = 2 } } },

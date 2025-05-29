@@ -1,5 +1,6 @@
 const std = @import("std");
 const stmt = @import("statement.zig");
+const compiler = @import("compiler.zig");
 const stdlibType = @import("stdlib/type.zig");
 
 pub const Identifier = @import("expression.zig").Identifier;
@@ -97,11 +98,29 @@ pub const Arity = struct {
             .var_args = var_args,
         };
     }
+
+    pub fn eql(self: Arity, other: Arity) bool {
+        const var_eql = b: {
+            if (self.var_args) |_| {
+                break :b if (other.var_args) |_| true else false;
+            } else {
+                break :b if (other.var_args) |_| false else true;
+            }
+        };
+        return self.args.len == other.args.len and var_eql;
+    }
+};
+
+pub const FunctionPointer = struct {
+    function_address: u24,
+    source_address: usize,
+    arity: Arity,
+    captures: ?[]Value = null,
 };
 
 pub const CompiledFunction = struct {
-    function_address: u24,
     arity: Arity,
+    code: compiler.Program,
 };
 
 pub const Function = struct {
@@ -212,13 +231,14 @@ pub const Value = union(enum) {
     none: ?void,
     boolean: bool,
     number: Number,
+    address: usize,
     string: []const u8,
     formatted_string: []const u8,
     array: []Value,
     dictionary: Dictionary,
     iterator: Iterator,
     function: Function,
-    compiled_function: CompiledFunction,
+    function_pointer: FunctionPointer,
 
     pub fn eql(self: Value, other: Value) bool {
         switch (self) {
@@ -226,6 +246,11 @@ pub const Value = union(enum) {
                 if (other == .number) {
                     return n.eql(other.number);
                 } else return false;
+            },
+            .address => |addr| if (other == .address) {
+                return addr == other.address;
+            } else {
+                return false;
             },
             .string => |str| return if (other == .string) std.mem.eql(u8, str, other.string) else false,
             .dictionary => |dict| {

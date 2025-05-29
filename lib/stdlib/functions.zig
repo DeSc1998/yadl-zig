@@ -52,7 +52,7 @@ pub fn length(args: libtype.CallMatch, scope: *Scope) Error!void {
 
 pub fn _type(args: libtype.CallMatch, scope: *Scope) Error!void {
     std.log.info("in type: was '{s}'", .{@tagName(args.unnamed_args[0])});
-    if (args.unnamed_args[0] == .compiled_function) {
+    if (args.unnamed_args[0] == .function_pointer) {
         scope.return_result = .{ .string = "function" };
     } else scope.return_result =
         .{ .string = @tagName(args.unnamed_args[0]) };
@@ -1010,6 +1010,45 @@ pub fn sort(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
+pub fn take(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const elements = args.unnamed_args[0];
+    const number = args.unnamed_args[1];
+    std.debug.assert(number == .number and number.number == .integer);
+    if (number.number.integer < 0) return Error.InvalidExpressoinType;
+
+    switch (elements) {
+        .array => |a| {
+            const size: usize = @intCast(number.number.integer);
+            scope.return_result = .{ .array = a[0..size] };
+        },
+        else => |e| {
+            std.debug.print("ERROR: `sort` is not defined for '{s}'\n", .{@tagName(e)});
+            return Error.InvalidExpressoinType;
+        },
+    }
+}
+
+pub fn drop(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const elements = args.unnamed_args[0];
+    const number = args.unnamed_args[1];
+    std.debug.assert(number == .number and number.number == .integer);
+    if (number.number.integer < 0) return Error.InvalidExpressoinType;
+
+    switch (elements) {
+        .array => |a| {
+            const size: usize = @intCast(number.number.integer);
+            if (size <= a.len)
+                scope.return_result = .{ .array = a[size..] }
+            else
+                scope.return_result = .{ .array = &.{} };
+        },
+        else => |e| {
+            std.debug.print("ERROR: `sort` is not defined for '{s}'\n", .{@tagName(e)});
+            return Error.InvalidExpressoinType;
+        },
+    }
+}
+
 pub fn last(args: libtype.CallMatch, scope: *Scope) Error!void {
     const elements = args.unnamed_args[0];
     const callback = args.unnamed_args[1];
@@ -1143,12 +1182,15 @@ pub fn write(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
-fn printValue(value: Value, scope: *Scope) Error!void {
+pub fn printValue(value: Value, scope: *Scope) Error!void {
     switch (value) {
         .number => |n| {
             if (n == .float) {
                 scope.out.print("{d}", .{n.float}) catch return Error.IOWrite;
             } else scope.out.print("{d}", .{n.integer}) catch return Error.IOWrite;
+        },
+        .address => |addr| {
+            scope.out.print("0x{x}", .{addr}) catch return Error.IOWrite;
         },
         .boolean => |v| {
             scope.out.print("{}", .{v}) catch return Error.IOWrite;
@@ -1191,10 +1233,11 @@ fn printValue(value: Value, scope: *Scope) Error!void {
         .iterator => {
             scope.out.print("<{s}>", .{@tagName(value)}) catch return Error.IOWrite;
         },
-        .compiled_function => |cf| {
-            scope.out.print("<{s}@{}, arity: (args: {}, var_args: {})>", .{
+        .function_pointer => |cf| {
+            scope.out.print("<{s} @ {}, source_address: {}, arity: (args: {}, var_args: {})>", .{
                 @tagName(value),
                 cf.function_address,
+                cf.source_address,
                 cf.arity.args.len,
                 if (cf.arity.var_args) |_| true else false,
             }) catch return Error.IOWrite;
