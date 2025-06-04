@@ -72,11 +72,6 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
     //     });
     // }
     switch (inst.op_code.major) {
-        // .Load => {
-        //     const addr = inst.argument.address;
-        //     // NOTE: load address: `Compiler.load_address` (see compiler.zig)
-        //     m.registers[255] = m.frame_stack.items[current_frame].program.memory[addr];
-        // },
         .Move => {
             if (inst.op_code.minor == .Immidiate) {
                 const imm = inst.argument.immidiate;
@@ -346,7 +341,15 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 }
             }
         },
-        .Capture, .ReadCapture => return Error.NotImplemented,
+        .Capture => {
+            const reg = inst.argument.registers;
+            const val = m.registers[reg.source_left];
+            std.debug.assert(m.registers[reg.destination] == .function_pointer);
+            const fp = m.registers[reg.destination].function_pointer;
+            const source = &(compiler.compiled_sources orelse unreachable).items[fp.source_address];
+            const function = &source.functions[fp.function_address];
+            function.memory[reg.source_right] = val;
+        },
     }
     m.frame_stack.items[current_frame].stack_ptr += 1;
 }

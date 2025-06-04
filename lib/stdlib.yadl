@@ -72,19 +72,15 @@ reduce = (items, func) => {
     }
 }
 
-equal_key = (groupper, item, key) => {
-    tmp = groupper(item)
-    return tmp == key
-}
-
 group_by = (items, groupper) => {
     out = {}
     if (type(items) == 'array') {
         index = 0
         while (index < len(items)) {
             key = groupper(items[index])
-            if (out[key] == none) {
-                // out[key] = filter(items, (x) => equal_key(groupper, x, key))
+            if (not bool(out[key])) {
+                tmp = filter(items, (x) => groupper(x) == key)
+                out[key] = tmp
             }
             index = index + 1
         }

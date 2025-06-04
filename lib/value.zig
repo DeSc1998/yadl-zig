@@ -115,7 +115,7 @@ pub const FunctionPointer = struct {
     function_address: u24,
     source_address: usize,
     arity: Arity,
-    captures: ?[]Value = null,
+    captures: ?compiler.CaptureMap = null,
 };
 
 pub const CompiledFunction = struct {
@@ -247,6 +247,11 @@ pub const Value = union(enum) {
                     return n.eql(other.number);
                 } else return false;
             },
+            .boolean => |b| {
+                if (other == .boolean) {
+                    return b == other.boolean;
+                } else return false;
+            },
             .address => |addr| if (other == .address) {
                 return addr == other.address;
             } else {
@@ -280,6 +285,12 @@ pub const Value = union(enum) {
                 } else return false;
             },
             .none => return if (other == .none) true else if (other == .dictionary and other.dictionary.entries.count() == 0) true else false,
+            .function_pointer => |fp| {
+                if (other == .function_pointer) {
+                    return fp.function_address == other.function_pointer.function_address and
+                        fp.source_address == other.function_pointer.source_address;
+                } else return false;
+            },
             else => return false,
         }
     }

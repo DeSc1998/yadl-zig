@@ -50,7 +50,8 @@ pub const MajorCode = enum(u6) {
     /// first argument is on the top
     CallValue,
 
-    /// reads at address `source_left`
+    /// as Register: reads at address `source_left`
+    /// as Immidiate: reads the value `value` to `destination`
     Read,
     /// writes `source_left` at address `destination`
     Write,
@@ -59,7 +60,7 @@ pub const MajorCode = enum(u6) {
     Capture,
     /// puts `source_right` at `source_left` (aka capture index)
     /// in the function pointer at `destination`
-    ReadCapture,
+    // ReadCapture,
 
     // Address OpCodes
     // layout: (op_code, address)
@@ -103,11 +104,6 @@ pub fn is_address_opcode(op: OpCode) bool {
 const ScopeKind = enum {
     Global,
     Local,
-};
-
-const FunctionKind = enum {
-    Value,
-    Assigned,
 };
 
 pub const Instruction = packed struct(u32) {
@@ -302,10 +298,13 @@ pub const Program = struct {
     memory: []value.Value = &.{},
 };
 
+pub const CaptureMap = std.StringHashMap(usize);
+
 const FunctionData = struct {
     offset: u24,
+    source_offset: usize,
     arity: expression.Arity,
-    captures: ?[]const expression.Identifier = null,
+    captures: ?CaptureMap = null,
 };
 const FunctionTable = std.StringHashMap(FunctionData);
 const VariableTable = std.StringHashMap(usize);
@@ -521,9 +520,13 @@ fn compile_function(
     }
 
     try externals_of_function(func, &externals, &locals);
-    // for (externals.items, 0..) |ext, index| {
-    //     std.log.info("external @ {}: {s}", .{ index, ext.name });
-    // }
+    var captures = std.StringHashMap(usize).init(compiler.main.allocator);
+    for (externals.items) |ext| {
+        const offset = tmp.static_mem.items.len;
+        try captures.put(ext.name, offset);
+        try tmp.var_table.put(ext.name, offset);
+        try tmp.static_mem.append(.{ .none = null });
+    }
     try compile_function_arguments(&tmp, func.arity);
     for (func.body) |st| {
         try compile_statment(&tmp, st, .Local);
@@ -548,16 +551,18 @@ fn compile_function(
         slot.* = prog;
         return FunctionData{
             .offset = 0,
+            .source_offset = 0,
             .arity = func.arity,
-            .captures = try externals.toOwnedSlice(),
+            .captures = captures,
         };
     } else {
         const offset: u24 = tmp.global_function_offset();
         try compiler.functions.append(prog);
         return FunctionData{
             .offset = offset,
+            .source_offset = if (compiled_sources) |ss| ss.items.len else 0,
             .arity = func.arity,
-            .captures = try externals.toOwnedSlice(),
+            .captures = captures,
         };
     }
 }
@@ -724,15 +729,15 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
                 const addr: u24 = compiler.global_function_offset();
                 try compiler.function_table.put(a.varName.name, .{
                     .offset = addr,
+                    .source_offset = if (compiled_sources) |ss| ss.items.len else 0,
                     .arity = func.arity,
                 });
                 const func_slot = try compiler.functions.addOne();
                 // std.log.info("compiling function: {s}", .{a.varName.name});
                 const data = try compile_function(compiler, func, func_slot);
                 if (data.captures) |cs| {
-                    if (cs.len != 0) {
-                        std.log.warn("unprocessed captures: currently ignored", .{});
-                    }
+                    const tmp = compiler.function_table.getPtr(a.varName.name) orelse unreachable;
+                    tmp.captures = cs;
                 }
                 return;
             }
@@ -1005,13 +1010,12 @@ fn compile_value(compiler: *Compiler, v: value.Value, target: u8) Error!void {
     const val = sw: switch (v) {
         .function => {
             const data = try compile_function(compiler, v.function, null);
-            const store = if (data.captures) |cs| if (cs.len != 0) try compiler.main.allocator.alloc(value.Value, cs.len) else null else null;
 
             break :sw value.Value{ .function_pointer = .{
                 .function_address = data.offset,
                 .source_address = if (compiled_sources) |ss| ss.items.len else 0,
                 .arity = v.function.arity,
-                .captures = store,
+                .captures = data.captures,
             } };
         },
         .number => |n| {
@@ -1029,12 +1033,45 @@ fn compile_value(compiler: *Compiler, v: value.Value, target: u8) Error!void {
         const addr = @as(u24, @truncate(index));
         if (tmp.eql(val)) {
             try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
+            if (val == .function_pointer) try compile_captures(compiler, val.function_pointer, target);
             return;
         }
     }
     const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
     try compiler.static_mem.append(val);
     try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
+    if (val == .function_pointer) try compile_captures(compiler, val.function_pointer, target);
+}
+
+fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) !void {
+    if (fp.captures) |captures| {
+        var iter = captures.iterator();
+        while (iter.next()) |entry| {
+            const capture_addr = entry.value_ptr.*;
+            const maybe_addr = compiler.var_table.get(entry.key_ptr.*);
+            if (maybe_addr) |addr| {
+                try compiler.main.append(Instruction.immidiate(.Read, target + 1, @intCast(addr)));
+                try compiler.main.append(
+                    Instruction.register(.Capture, target, target + 1, @intCast(capture_addr)),
+                );
+            } else {
+                const data = compiler.get_function(entry.key_ptr.*) orelse {
+                    std.log.err("no local value found for capture '{s}'", .{entry.key_ptr.*});
+                    return Error.UndefinedVariable;
+                };
+                const tmp: value.Value = .{ .function_pointer = .{
+                    .function_address = data.offset,
+                    .source_address = data.source_offset,
+                    .arity = data.arity,
+                    .captures = data.captures,
+                } };
+                try compile_value(compiler, tmp, target + 1);
+                try compiler.main.append(
+                    Instruction.register(.Capture, target, target + 1, @intCast(capture_addr)),
+                );
+            }
+        }
+    }
 }
 
 fn eval_expression(alloc: std.mem.Allocator, expr: expression.Expression) !value.Value {
