@@ -84,7 +84,7 @@ group_by = (items, groupper) => {
         while (index < len(items)) {
             key = groupper(items[index])
             if (out[key] == none) {
-                out[key] = filter(items, (x) => equal_key(groupper, x, key))
+                // out[key] = filter(items, (x) => equal_key(groupper, x, key))
             }
             index = index + 1
         }

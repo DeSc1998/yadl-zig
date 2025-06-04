@@ -19,7 +19,7 @@ pub const Error = error{
     ParserError,
 } || std.mem.Allocator.Error;
 
-const OpCode = enum(u8) {
+pub const MajorCode = enum(u6) {
     // Register OpCodes
     // layout: (op_code, destination, source_left, source_right)
     Add,
@@ -68,10 +68,6 @@ const OpCode = enum(u8) {
     /// NOTE: does not advance the stack pointer after jump
     JmpOnFalse,
 
-    /// loads value at `address` from static memory into
-    /// register `Compiler.var_offset - 1` (at the time: 7)
-    Load,
-
     // /// `address` is interpreted as size.
     // /// puts the returned address at `Compiler.var_offset - 1`
     // Allocate,
@@ -82,17 +78,26 @@ const OpCode = enum(u8) {
     /// call arguments are expected to be on the stack.
     /// first argument is on the top
     CallStd,
+    /// Call to Intrinsic/buildin function:
     /// call arguments are expected to be on the stack.
     /// first argument is on the top
-    CallIntrinsic,
+    CallIntr,
     Return,
 };
 
+pub const MinorCode = enum(u2) {
+    Register,
+    Immidiate,
+    Address,
+};
+
+const OpCode = packed struct(u8) {
+    major: MajorCode,
+    minor: MinorCode,
+};
+
 pub fn is_address_opcode(op: OpCode) bool {
-    return switch (op) {
-        .Return, .JmpOnFalse, .Jmp, .Load, .Call, .CallStd, .CallIntrinsic => true,
-        else => false,
-    };
+    return op.minor == .Address;
 }
 
 const ScopeKind = enum {
@@ -110,6 +115,7 @@ pub const Instruction = packed struct(u32) {
     argument: packed union {
         registers: Registers,
         address: u24,
+        immidiate: Immidiate,
     },
 
     const Registers = packed struct(u24) {
@@ -118,9 +124,15 @@ pub const Instruction = packed struct(u32) {
         source_right: u8,
     };
 
-    fn register(code: OpCode, dest: u8, left: ?u8, right: ?u8) Instruction {
+    /// Reads and/or Writes to `destination`
+    const Immidiate = packed struct(u24) {
+        destination: u8,
+        value: u16,
+    };
+
+    fn register(code: MajorCode, dest: u8, left: ?u8, right: ?u8) Instruction {
         return .{
-            .op_code = code,
+            .op_code = .{ .major = code, .minor = .Register },
             .argument = .{ .registers = .{
                 .destination = dest,
                 .source_left = if (left) |l| l else 0,
@@ -129,21 +141,31 @@ pub const Instruction = packed struct(u32) {
         };
     }
 
-    fn address(code: OpCode, addr: u24) Instruction {
+    fn immidiate(code: MajorCode, dest: u8, val: u16) Instruction {
         return .{
-            .op_code = code,
+            .op_code = .{ .major = code, .minor = .Immidiate },
+            .argument = .{ .immidiate = .{
+                .destination = dest,
+                .value = val,
+            } },
+        };
+    }
+
+    fn address(code: MajorCode, addr: u24) Instruction {
+        return .{
+            .op_code = .{ .major = code, .minor = .Address },
             .argument = .{ .address = addr },
         };
     }
 
     fn color_of(op_code: OpCode) std.io.tty.Color {
         const Color = std.io.tty.Color;
-        return switch (op_code) {
+        return switch (op_code.major) {
             .Move => Color.yellow,
             .Add, .Sub, .Mul, .Mod, .Div, .Expo => Color.bright_cyan,
             .CmpEq, .CmpLess, .And, .Or, .Not => Color.bright_blue,
             .AccessRead, .AccessWrite, .Read, .Write => Color.magenta,
-            .Call, .CallStd, .CallIntrinsic, .CallValue => Color.green,
+            .Call, .CallStd, .CallIntr, .CallValue => Color.green,
             .Jmp, .JmpOnFalse => Color.red,
             else => Color.white,
         };
@@ -164,25 +186,39 @@ pub const Instruction = packed struct(u32) {
 
     fn dump_to_file(self: Instruction, file: std.fs.File, offset: usize) !void {
         const writer = file.writer();
-        try writer.print(" {:<4}", .{offset});
+        try writer.print(" 0x{X:0>6}", .{offset});
         if (is_address_opcode(self.op_code)) {
             const addr = self.argument.address;
-            try writer.print(" {s:<10}", .{@tagName(self.op_code)});
-            try writer.print(" {}", .{addr});
-            if (self.op_code == .Jmp) {
+            try writer.print(" {s:<10}", .{@tagName(self.op_code.major)});
+            try writer.print(" 0x{X:0>6}", .{addr});
+            if (self.op_code.major == .Jmp) {
                 if (self.argument.address > offset) {
                     _ = try writer.write(" // end of positive if branch");
                 } else {
                     _ = try writer.write(" // end of while loop");
                 }
-            } else if (self.op_code == .CallIntrinsic) {
+            } else if (self.op_code.major == .CallIntr) {
                 const name = stdlib.builtins.keys()[self.argument.address];
                 _ = try writer.print(" // Intrinsic: {s}", .{name});
+            } else if (self.op_code.major == .CallStd) {
+                const source = &(compiled_sources orelse unreachable).items[0];
+                var iter = source.function_table.iterator();
+                while (iter.next()) |entry| {
+                    if (addr == entry.value_ptr.offset) {
+                        _ = try writer.print(" // Std Function: {s}", .{entry.key_ptr.*});
+                        break;
+                    }
+                }
             }
         } else {
             const regs = self.argument.registers;
-            try writer.print(" {s:<6}", .{@tagName(self.op_code)});
-            switch (self.op_code) {
+            var tmp: [32]u8 = undefined;
+            const name = try std.fmt.bufPrint(&tmp, "{s}{s}", .{
+                @tagName(self.op_code.major),
+                if (self.op_code.minor == .Immidiate) "Imm" else "",
+            });
+            try writer.print(" {s:<8}", .{name});
+            switch (self.op_code.major) {
                 .Move, .Not, .Read, .Write => try writer.print(" {} <- {}", .{
                     regs.destination,
                     regs.source_left,
@@ -201,36 +237,50 @@ pub const Instruction = packed struct(u32) {
     fn dump_to_console(self: Instruction, file: std.fs.File, offset: usize) !void {
         const tty_config = std.io.tty.detectConfig(file);
         const writer = file.writer();
-        try writer.print(" {:<4}", .{offset});
+        try writer.print(" 0x{X:0>6}", .{offset});
         if (is_address_opcode(self.op_code)) {
             const addr = self.argument.address;
             const color = color_of(self.op_code);
             const boldness = boldness_of(self.op_code);
             try std.io.tty.Config.setColor(tty_config, writer, color);
             try std.io.tty.Config.setColor(tty_config, writer, boldness);
-            try writer.print(" {s:<10}", .{@tagName(self.op_code)});
+            try writer.print(" {s:<10}", .{@tagName(self.op_code.major)});
             try std.io.tty.Config.setColor(tty_config, writer, .reset);
-            try writer.print(" {}", .{addr});
+            try writer.print(" 0x{X:0>6}", .{addr});
             try std.io.tty.Config.setColor(tty_config, writer, .green);
             try std.io.tty.Config.setColor(tty_config, writer, .dim);
-            if (self.op_code == .Jmp) {
+            if (self.op_code.major == .Jmp) {
                 if (self.argument.address > offset) {
                     _ = try writer.write(" // end of positive if branch");
                 } else {
                     _ = try writer.write(" // end of while loop");
                 }
-            } else if (self.op_code == .CallIntrinsic) {
+            } else if (self.op_code.major == .CallIntr) {
                 const name = stdlib.builtins.keys()[self.argument.address];
                 _ = try writer.print(" // Intrinsic: {s}", .{name});
+            } else if (self.op_code.major == .CallStd) {
+                const source = &(compiled_sources orelse unreachable).items[0];
+                var iter = source.function_table.iterator();
+                while (iter.next()) |entry| {
+                    if (addr == entry.value_ptr.offset) {
+                        _ = try writer.print(" // Std Function: {s}", .{entry.key_ptr.*});
+                        break;
+                    }
+                }
             }
             try std.io.tty.Config.setColor(tty_config, writer, .reset);
         } else {
             const regs = self.argument.registers;
             const color = color_of(self.op_code);
+            var tmp: [32]u8 = undefined;
             try std.io.tty.Config.setColor(tty_config, writer, color);
-            try writer.print(" {s:<6}", .{@tagName(self.op_code)});
+            const name = try std.fmt.bufPrint(&tmp, "{s}{s}", .{
+                @tagName(self.op_code.major),
+                if (self.op_code.minor == .Immidiate) "Imm" else "",
+            });
+            try writer.print(" {s:<8}", .{name});
             try std.io.tty.Config.setColor(tty_config, writer, .reset);
-            switch (self.op_code) {
+            switch (self.op_code.major) {
                 .Move, .Not, .Read, .Write => try writer.print(" {} <- {}", .{
                     regs.destination,
                     regs.source_left,
@@ -282,7 +332,7 @@ pub const CompiledSource = struct {
             var function_found = false;
             while (iter.next()) |entry| {
                 if (entry.value_ptr.offset == offset) {
-                    try writer.print("{s} @ {}:\n", .{ entry.key_ptr.*, offset });
+                    try writer.print("{s} @ 0x{X}:\n", .{ entry.key_ptr.*, offset });
                     function_found = true;
                     break;
                 }
@@ -291,7 +341,7 @@ pub const CompiledSource = struct {
                 try writer.print("anonimous-function @ {}:\n", .{offset});
             }
             for (f.memory, 0..) |v, index| {
-                try writer.print("  memory @ {}: {s} ", .{ index, @tagName(v) });
+                try writer.print("  memory @ 0x{X}: {s} ", .{ index, @tagName(v) });
                 var scope = Scope.empty(self.allocator, writer.any());
                 stdlib.functions.printValue(v, &scope) catch unreachable;
                 _ = writer.write("\n") catch unreachable;
@@ -305,7 +355,7 @@ pub const CompiledSource = struct {
 
         try writer.print("entry point:\n", .{});
         for (self.main_program.memory, 0..) |v, index| {
-            try writer.print("memory @ {}: {s} ", .{ index, @tagName(v) });
+            try writer.print("memory @ 0x{X}: {s} ", .{ index, @tagName(v) });
             var scope = Scope.empty(self.allocator, writer.any());
             stdlib.functions.printValue(v, &scope) catch unreachable;
             _ = writer.write("\n") catch unreachable;
@@ -384,7 +434,7 @@ pub fn compile_stdlib(allocator: std.mem.Allocator) Error!*CompiledSource {
         std.debug.assert(sources.items.len > 0);
         return &sources.items[0];
     } else {
-        const lib_source = @embedFile("stdlib.yadl");
+        const lib_source = @import("yadl-stdlib").source;
         var parser = Parser.init(lib_source, allocator);
         const statements = parser.parse() catch |err| {
             std.log.err("not implemented: handling of failed parsing: {}", .{err});
@@ -478,12 +528,12 @@ fn compile_function(
     for (func.body) |st| {
         try compile_statment(&tmp, st, .Local);
     }
-    if (tmp.main.items[tmp.main.items.len - 1].op_code != .Return)
+    if (tmp.main.items[tmp.main.items.len - 1].op_code.major != .Return)
         try tmp.main.append(Instruction.address(.Return, 0));
     if (tmp.compiles_stdlib) {
         for (tmp.main.items) |*inst| {
-            if (inst.op_code == .Call) {
-                inst.op_code = .CallStd;
+            if (inst.op_code.major == .Call) {
+                inst.op_code.major = .CallStd;
             }
         }
     }
@@ -607,10 +657,7 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         const addr = compiler.static_mem.items.len;
         try compiler.static_mem.append(value.Value{ .none = null });
         try compiler.var_table.put(arg.name, addr);
-        const address: expression.Expression = .{ .value = .{ .address = addr } };
-        try compiler.main.append(Instruction.register(.Pop, 1, null, null));
-        try compile_expression(compiler, &address, Compiler.load_address);
-        try compiler.main.append(Instruction.register(.Write, Compiler.load_address, 1, null));
+        try compiler.main.append(Instruction.address(.Pop, @intCast(addr)));
     }
 
     if (arity.var_args) |id| {
@@ -629,9 +676,9 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
 
         const start_loop = @as(u24, @truncate(compiler.main.items.len));
         // while (var_arg_count != 0) {
-        try compiler.main.append(Instruction.address(.Load, 0));
+        try compiler.main.append(Instruction.immidiate(.Read, 3, 0));
         try compiler.main.append(
-            Instruction.register(.CmpEq, compare_reg, arg_count_reg, Compiler.load_address),
+            Instruction.register(.CmpEq, compare_reg, arg_count_reg, 3),
         );
         try compiler.main.append(Instruction.register(.Not, compare_reg, compare_reg, null));
         const jmp_index = @as(u24, @truncate(compiler.main.items.len));
@@ -640,7 +687,7 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         try compiler.main.append(Instruction.register(.Push, tmp_array_reg, null, null));
         try compile_expression(compiler, &constant_two, 0);
         const addr = stdlib.builtins.getIndex("append") orelse unreachable;
-        try compiler.main.append(Instruction.address(.CallIntrinsic, @as(u24, @truncate(addr))));
+        try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
         try compiler.main.append(Instruction.register(.Move, tmp_array_reg, 0, null));
         // var_arg_count -= 1
         const one = expression.Expression{ .value = .{ .number = .{ .integer = 1 } } };
@@ -691,10 +738,15 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
             }
 
             if (compiler.var_table.get(a.varName.name)) |addr| {
-                const address_value: expression.Expression = .{ .value = .{ .address = addr } };
-                try compile_expression(compiler, a.value, 1);
-                try compile_expression(compiler, &address_value, Compiler.load_address);
-                try compiler.main.append(Instruction.register(.Write, Compiler.load_address, 1, null));
+                if (addr <= std.math.maxInt(u16)) {
+                    try compile_expression(compiler, a.value, 1);
+                    try compiler.main.append(Instruction.immidiate(.Write, 1, @intCast(addr)));
+                } else {
+                    const address_value: expression.Expression = .{ .value = .{ .address = addr } };
+                    try compile_expression(compiler, a.value, 1);
+                    try compile_expression(compiler, &address_value, Compiler.load_address);
+                    try compiler.main.append(Instruction.register(.Write, Compiler.load_address, 1, null));
+                }
             } else {
                 const addr: usize = compiler.static_mem.items.len;
                 try compiler.static_mem.append(value.Value{ .none = null });
@@ -823,7 +875,7 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
     } else if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
         const context = stdlib.builtins.get(fc.func.identifier.name) orelse unreachable;
         try compile_call_arguments(compiler, fc.args, target, context);
-        try compiler.main.append(Instruction.address(.CallIntrinsic, @as(u24, @truncate(addr))));
+        try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
     } else if (compiler.get_function(fc.func.identifier.name)) |data| {
         const addr = data.offset;
         try compile_call_arguments(compiler, fc.args, target, .{
@@ -847,7 +899,7 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
                 .has_variadics = false,
             },
         });
-        try compiler.main.append(Instruction.address(.Load, @truncate(addr)));
+        try compiler.main.append(Instruction.immidiate(.Read, Compiler.load_address, @truncate(addr)));
         try compiler.main.append(Instruction.register(.CallValue, 0, Compiler.load_address, target));
     }
     if (target != 0) {
@@ -858,60 +910,7 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
 
 fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, target: u8) Error!void {
     switch (expr.*) {
-        .value => |v| {
-            var captures: ?[]const expression.Identifier = null;
-            const val: value.Value = if (v == .function) b: {
-                const data = try compile_function(compiler, v.function, null);
-                if (data.captures) |cs| {
-                    if (cs.len == 0) {
-                        const fp = value.FunctionPointer{
-                            .function_address = data.offset,
-                            .source_address = if (compiled_sources) |ss| ss.items.len else 0,
-                            .arity = v.function.arity,
-                        };
-                        break :b .{ .function_pointer = fp };
-                    } else {
-                        const fp = value.FunctionPointer{
-                            .function_address = data.offset,
-                            .source_address = if (compiled_sources) |ss| ss.items.len else 0,
-                            .arity = v.function.arity,
-                            .captures = try compiler.main.allocator.alloc(value.Value, cs.len),
-                        };
-                        captures = cs;
-                        break :b .{ .function_pointer = fp };
-                    }
-                } else {
-                    const fp = value.FunctionPointer{
-                        .function_address = data.offset,
-                        .source_address = if (compiled_sources) |ss| ss.items.len else 0,
-                        .arity = v.function.arity,
-                    };
-                    break :b .{ .function_pointer = fp };
-                }
-            } else v;
-
-            for (compiler.static_mem.items, 0..) |tmp, index| {
-                const addr = @as(u24, @truncate(index));
-                if (tmp.eql(val)) {
-                    try compiler.main.append(Instruction.address(.Load, addr));
-                    if (target != Compiler.load_address) try compiler.main.append(
-                        Instruction.register(.Move, target, Compiler.load_address, null),
-                    );
-                    if (captures) |cs| {
-                        for (cs, 0..) |capture, offset| {
-                            std.log.info("capturing {s} with index {}", .{ capture.name, offset });
-                        }
-                    }
-                    return;
-                }
-            }
-            const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
-            try compiler.static_mem.append(val);
-            try compiler.main.append(Instruction.address(.Load, addr));
-            if (target != Compiler.load_address) try compiler.main.append(
-                Instruction.register(.Move, target, Compiler.load_address, null),
-            );
-        },
+        .value => |v| try compile_value(compiler, v, target),
         .binary_op => |bin| {
             if (bin.op != .compare) {
                 const left = target;
@@ -930,8 +929,8 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
         .unary_op => |un| {
             if (un.op == .arithmetic and un.op.arithmetic == expression.ArithmeticOps.Sub) {
                 try compile_expression(compiler, un.operant, target);
-                try compiler.main.append(Instruction.address(.Load, 0));
-                try compiler.main.append(Instruction.register(.Sub, target, Compiler.load_address, target));
+                try compiler.main.append(Instruction.immidiate(.Move, target + 1, 0));
+                try compiler.main.append(Instruction.register(.Sub, target, target + 1, target));
                 return;
             } else if (un.op == .boolean and un.op.boolean == expression.BooleanOps.Not) {
                 try compile_expression(compiler, un.operant, target);
@@ -949,9 +948,13 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
         .functioncall => |fc| try compile_function_call(compiler, fc, target),
         .identifier => |id| {
             if (compiler.var_table.get(id.name)) |addr| {
-                const address: expression.Expression = .{ .value = .{ .address = addr } };
-                try compile_expression(compiler, &address, Compiler.load_address);
-                try compiler.main.append(Instruction.register(.Read, target, Compiler.load_address, null));
+                if (addr <= std.math.maxInt(u16)) {
+                    try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
+                } else {
+                    const address: expression.Expression = .{ .value = .{ .address = addr } };
+                    try compile_expression(compiler, &address, Compiler.load_address);
+                    try compiler.main.append(Instruction.register(.Read, target, Compiler.load_address, null));
+                }
             } else if (compiler.get_function(id.name)) |data| {
                 const offset: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
                 const fp = value.FunctionPointer{
@@ -960,10 +963,7 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                     .arity = data.arity,
                 };
                 try compiler.static_mem.append(.{ .function_pointer = fp });
-                try compiler.main.append(Instruction.address(.Load, offset));
-                if (target != Compiler.load_address) try compiler.main.append(
-                    Instruction.register(.Move, target, Compiler.load_address, null),
-                );
+                try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(offset)));
             } else {
                 std.log.err("undefined variable: {s}", .{id.name});
                 return Error.UndefinedVariable;
@@ -981,10 +981,7 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
             const array = value.Value{ .array = tmp };
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
             try compiler.static_mem.append(array);
-            try compiler.main.append(Instruction.address(.Load, addr));
-            if (target != Compiler.load_address) try compiler.main.append(
-                Instruction.register(.Move, target, Compiler.load_address, null),
-            );
+            try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
         },
         .dictionary => |dict| {
             if (!all_comptime_entry(dict.entries)) {
@@ -999,12 +996,45 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
             }
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
             try compiler.static_mem.append(tmp);
-            try compiler.main.append(Instruction.address(.Load, addr));
-            if (target != Compiler.load_address) try compiler.main.append(
-                Instruction.register(.Move, target, Compiler.load_address, null),
-            );
+            try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
         },
     }
+}
+
+fn compile_value(compiler: *Compiler, v: value.Value, target: u8) Error!void {
+    const val = sw: switch (v) {
+        .function => {
+            const data = try compile_function(compiler, v.function, null);
+            const store = if (data.captures) |cs| if (cs.len != 0) try compiler.main.allocator.alloc(value.Value, cs.len) else null else null;
+
+            break :sw value.Value{ .function_pointer = .{
+                .function_address = data.offset,
+                .source_address = if (compiled_sources) |ss| ss.items.len else 0,
+                .arity = v.function.arity,
+                .captures = store,
+            } };
+        },
+        .number => |n| {
+            if (n == .integer and n.integer <= std.math.maxInt(u16) and n.integer >= 0) {
+                try compiler.main.append(
+                    Instruction.immidiate(.Move, target, @intCast(n.integer)),
+                );
+                return;
+            } else break :sw v;
+        },
+        else => |val| val,
+    };
+
+    for (compiler.static_mem.items, 0..) |tmp, index| {
+        const addr = @as(u24, @truncate(index));
+        if (tmp.eql(val)) {
+            try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
+            return;
+        }
+    }
+    const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
+    try compiler.static_mem.append(val);
+    try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
 }
 
 fn eval_expression(alloc: std.mem.Allocator, expr: expression.Expression) !value.Value {
@@ -1055,22 +1085,22 @@ fn all_comptime_entry(entries: []const expression.DictionaryEntry) bool {
     return true;
 }
 
-fn arithmetic_op_to_instruction(op: expression.ArithmeticOps) OpCode {
+fn arithmetic_op_to_instruction(op: expression.ArithmeticOps) MajorCode {
     return switch (op) {
-        .Add => OpCode.Add,
-        .Div => OpCode.Div,
-        .Expo => OpCode.Expo,
-        .Mod => OpCode.Mod,
-        .Mul => OpCode.Mul,
-        .Sub => OpCode.Sub,
+        .Add => MajorCode.Add,
+        .Div => MajorCode.Div,
+        .Expo => MajorCode.Expo,
+        .Mod => MajorCode.Mod,
+        .Mul => MajorCode.Mul,
+        .Sub => MajorCode.Sub,
     };
 }
 
-fn boolean_op_to_instruction(op: expression.BooleanOps) OpCode {
+fn boolean_op_to_instruction(op: expression.BooleanOps) MajorCode {
     return switch (op) {
-        .And => OpCode.And,
-        .Or => OpCode.Or,
-        .Not => OpCode.Not,
+        .And => MajorCode.And,
+        .Or => MajorCode.Or,
+        .Not => MajorCode.Not,
     };
 }
 

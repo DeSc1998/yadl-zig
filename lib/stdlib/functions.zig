@@ -1234,8 +1234,7 @@ pub fn printValue(value: Value, scope: *Scope) Error!void {
             scope.out.print("<{s}>", .{@tagName(value)}) catch return Error.IOWrite;
         },
         .function_pointer => |cf| {
-            scope.out.print("<{s} @ {}, source_address: {}, arity: (args: {}, var_args: {})>", .{
-                @tagName(value),
+            scope.out.print("<addr: 0x{X}, src-addr: 0x{X}, arity: (args: {}, var_args: {})>", .{
                 cf.function_address,
                 cf.source_address,
                 cf.arity.args.len,

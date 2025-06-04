@@ -71,184 +71,22 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
     //         inst.argument.registers.source_right,
     //     });
     // }
-    switch (inst.op_code) {
-        .Load => {
-            const addr = inst.argument.address;
-            // NOTE: load address: `Compiler.load_address` (see compiler.zig)
-            m.registers[255] = m.frame_stack.items[current_frame].program.memory[addr];
-        },
+    switch (inst.op_code.major) {
+        // .Load => {
+        //     const addr = inst.argument.address;
+        //     // NOTE: load address: `Compiler.load_address` (see compiler.zig)
+        //     m.registers[255] = m.frame_stack.items[current_frame].program.memory[addr];
+        // },
         .Move => {
-            const regs = inst.argument.registers;
-            m.registers[regs.destination] = m.registers[regs.source_left];
-        },
-        .Mul => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not multiply '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.mul(right.number) };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not multiply left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
+            if (inst.op_code.minor == .Immidiate) {
+                const imm = inst.argument.immidiate;
+                m.registers[imm.destination] = .{ .number = .{ .integer = imm.value } };
+            } else {
+                const regs = inst.argument.registers;
+                m.registers[regs.destination] = m.registers[regs.source_left];
             }
         },
-        .Mod => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not apply modulo to '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.mod(right.number) };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not apply modulo to left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
-            }
-        },
-        .Div => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not divide '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.div(right.number) };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not divide left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
-            }
-        },
-        .Expo => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not exponatiate '{s}' to '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.expo(right.number) };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not exponatiate left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
-            }
-        },
-        .Add => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not add '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.add(right.number) };
-                },
-                .string => |l| {
-                    if (right != .string) {
-                        std.log.err(
-                            "can not add '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    const res = try std.mem.join(m.frame_stack.allocator, "", &.{ l, right.string });
-                    m.registers[regs.destination] = .{ .string = res };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not add left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
-            }
-        },
-        .Sub => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            const right = m.registers[regs.source_right];
-            switch (left) {
-                .number => |l| {
-                    if (right != .number) {
-                        std.log.err(
-                            "can not subtract '{s}' and '{s}': implicit conversion not allowed",
-                            .{ @tagName(left), @tagName(right) },
-                        );
-                        try print_trace(m);
-                        return Error.IllegalValue;
-                    }
-                    m.registers[regs.destination] = .{ .number = l.sub(right.number) };
-                },
-                else => |val| {
-                    std.log.err(
-                        "can not subtract left-side '{s}': implicit conversion not allowed",
-                        .{@tagName(val)},
-                    );
-                    try print_trace(m);
-                    return Error.IllegalValue;
-                },
-            }
-        },
+        .Mul, .Add, .Div, .Expo, .Mod, .Sub => try execute_arithmetic(m, inst),
         .Call => {
             const addr = inst.argument.address;
             const function = m.function_table[addr];
@@ -283,7 +121,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             });
             return;
         },
-        .CallIntrinsic => {
+        .CallIntr => {
             const addr = inst.argument.address;
             const name = stdlib.builtins.keys()[addr];
             const context = stdlib.builtins.get(name) orelse unreachable;
@@ -365,31 +203,31 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             try m.value_stack.append(m.registers[dest]);
         },
         .Pop => {
-            const regs = inst.argument.registers;
-            const dest = regs.destination;
-            m.registers[dest] = m.value_stack.pop() orelse {
-                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
-                std.log.err("stack was empty @ sp = {}, f = {}", .{
-                    stack_ptr,
-                    current_frame,
-                });
-                const stderr = std.io.getStdErr();
-                const writer = stderr.writer();
-                const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
-                for (0..10) |index| {
-                    const current = base + index;
-                    const i = m.frame_stack.items[current_frame].program.instructions[current];
-                    if (current == stack_ptr) {
-                        writer.print("------ current instruction -------\n", .{}) catch unreachable;
-                    }
-                    i.dump(stderr, current) catch unreachable;
-                    if (current == stack_ptr) {
-                        writer.print("----------------------------------\n", .{}) catch unreachable;
-                    }
-                }
-                std.log.err("------------------------------", .{});
-                return Error.EmptyStack;
-            };
+            if (inst.op_code.minor == .Address) {
+                const addr = inst.argument.address;
+                const ptr = &m.frame_stack.items[current_frame].program.memory[addr];
+                ptr.* = m.value_stack.pop() orelse {
+                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                    std.log.err("stack was empty @ sp = {}, f = {}", .{
+                        stack_ptr,
+                        current_frame,
+                    });
+                    try print_trace(m);
+                    return Error.EmptyStack;
+                };
+            } else {
+                const regs = inst.argument.registers;
+                const dest = regs.destination;
+                m.registers[dest] = m.value_stack.pop() orelse {
+                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                    std.log.err("stack was empty @ sp = {}, f = {}", .{
+                        stack_ptr,
+                        current_frame,
+                    });
+                    try print_trace(m);
+                    return Error.EmptyStack;
+                };
+            }
         },
         .AccessRead => {
             const regs = inst.argument.registers;
@@ -470,36 +308,120 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             }
         },
         .Write => {
-            const regs = inst.argument.registers;
-            const dest = m.registers[regs.destination];
-            const left = m.registers[regs.source_left];
-            std.debug.assert(dest == .address);
-            m.frame_stack.items[current_frame].program.memory[dest.address] = left;
+            if (inst.op_code.minor == .Immidiate) {
+                const imm = inst.argument.immidiate;
+                m.frame_stack.items[current_frame].program.memory[imm.value] = m.registers[imm.destination];
+            } else {
+                const regs = inst.argument.registers;
+                const dest = m.registers[regs.destination];
+                const left = m.registers[regs.source_left];
+                std.debug.assert(dest == .address);
+                m.frame_stack.items[current_frame].program.memory[dest.address] = left;
+            }
         },
         .Read => {
-            const regs = inst.argument.registers;
-            const left = m.registers[regs.source_left];
-            std.debug.assert(left == .address);
-            if (m.frame_stack.items[current_frame].program.memory.len > left.address) {
-                const tmp = m.frame_stack.items[current_frame].program.memory[left.address];
-                m.registers[regs.destination] = tmp;
+            if (inst.op_code.minor == .Immidiate) {
+                const imm = inst.argument.immidiate;
+                const tmp = m.frame_stack.items[current_frame].program.memory[imm.value];
+                m.registers[imm.destination] = tmp;
             } else {
-                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
-                std.log.err("accessed out of bound: memory size: {}, address: {}", .{
-                    m.frame_stack.items[current_frame].program.memory.len,
-                    left.address,
-                });
-                std.log.err("stack was empty @ sp = {}, f = {}", .{
-                    stack_ptr,
-                    current_frame,
-                });
-                try print_trace(m);
-                return Error.IllegalValue;
+                const regs = inst.argument.registers;
+                const left = m.registers[regs.source_left];
+                std.debug.assert(left == .address);
+                if (m.frame_stack.items[current_frame].program.memory.len > left.address) {
+                    const tmp = m.frame_stack.items[current_frame].program.memory[left.address];
+                    m.registers[regs.destination] = tmp;
+                } else {
+                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
+                    std.log.err("accessed out of bound: memory size: {}, address: {}", .{
+                        m.frame_stack.items[current_frame].program.memory.len,
+                        left.address,
+                    });
+                    std.log.err("stack was empty @ sp = {}, f = {}", .{
+                        stack_ptr,
+                        current_frame,
+                    });
+                    try print_trace(m);
+                    return Error.IllegalValue;
+                }
             }
         },
         .Capture, .ReadCapture => return Error.NotImplemented,
     }
     m.frame_stack.items[current_frame].stack_ptr += 1;
+}
+
+fn op_name(code: compiler.MajorCode) []const u8 {
+    return switch (code) {
+        .Add => "add",
+        .Sub => "subtract",
+        .Mul => "multiply",
+        .Div => "divide",
+        .Expo => "exponatiate",
+        .Mod => "modulo",
+        else => unreachable,
+    };
+}
+
+fn execute_arithmetic(m: *Maschine, inst: compiler.Instruction) Error!void {
+    const regs = inst.argument.registers;
+    const left = m.registers[regs.source_left];
+    const right = m.registers[regs.source_right];
+    const name = op_name(inst.op_code.major);
+    switch (left) {
+        .number => |l| {
+            if (right != .number) {
+                std.log.err(
+                    "can not {s} '{s}' and '{s}': implicit conversion not allowed",
+                    .{ name, @tagName(left), @tagName(right) },
+                );
+                try print_trace(m);
+                return Error.IllegalValue;
+            }
+            if (inst.op_code.minor == .Register) {
+                switch (inst.op_code.major) {
+                    .Add => m.registers[regs.destination] = .{ .number = l.add(right.number) },
+                    .Sub => m.registers[regs.destination] = .{ .number = l.sub(right.number) },
+                    .Mul => m.registers[regs.destination] = .{ .number = l.mul(right.number) },
+                    .Mod => m.registers[regs.destination] = .{ .number = l.mod(right.number) },
+                    .Div => m.registers[regs.destination] = .{ .number = l.div(right.number) },
+                    .Expo => m.registers[regs.destination] = .{ .number = l.expo(right.number) },
+                    else => {
+                        std.log.err("reached unreachable: code was {s}", .{@tagName(inst.op_code.major)});
+                        unreachable;
+                    },
+                }
+            } else if (inst.op_code.minor == .Immidiate) {
+                std.log.err("todo: implement Immidiate path of {s}", .{@tagName(inst.op_code.major)});
+                return Error.NotImplemented;
+            }
+        },
+        .string => |l| {
+            if (inst.op_code.major != .Add) {
+                std.log.err("strings can only be added", .{});
+                try print_trace(m);
+                return Error.IllegalValue;
+            }
+            if (right != .string) {
+                std.log.err(
+                    "can not add '{s}' and '{s}': implicit conversion not allowed",
+                    .{ @tagName(left), @tagName(right) },
+                );
+                try print_trace(m);
+                return Error.IllegalValue;
+            }
+            const res = try std.mem.join(m.frame_stack.allocator, "", &.{ l, right.string });
+            m.registers[regs.destination] = .{ .string = res };
+        },
+        else => |val| {
+            std.log.err(
+                "can not {s} left-side '{s}': implicit conversion not allowed",
+                .{ name, @tagName(val) },
+            );
+            try print_trace(m);
+            return Error.IllegalValue;
+        },
+    }
 }
 
 fn print_trace(m: *Maschine) !void {
