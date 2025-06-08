@@ -1165,7 +1165,7 @@ fn compile_binary_expression(
             expression.CompareOps.Greater => {
                 try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
                 try compiler.main.append(Instruction.register(.CmpLess, left, left, right));
-                try compiler.main.append(Instruction.register(.And, target, target, left));
+                try compiler.main.append(Instruction.register(.Or, target, target, left));
                 try compiler.main.append(Instruction.register(.Not, target, target, null));
             },
             expression.CompareOps.GreaterEqual => {
