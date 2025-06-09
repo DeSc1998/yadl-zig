@@ -182,14 +182,17 @@ pub const Iterator = struct {
     allocator: std.mem.Allocator,
     next_fn: union(enum) {
         runtime: Function,
+        pointer: FunctionPointer,
         builtin: stdlibType.NextFn,
     },
     has_next_fn: union(enum) {
         runtime: Function,
+        pointer: FunctionPointer,
         builtin: stdlibType.HasNextFn,
     },
     peek_fn: ?union(enum) {
         runtime: Function,
+        pointer: FunctionPointer,
         builtin: stdlibType.PeekFn,
     },
     data: []Value,

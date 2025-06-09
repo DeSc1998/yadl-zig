@@ -51,7 +51,7 @@ pub fn length(args: libtype.CallMatch, scope: *Scope) Error!void {
 }
 
 pub fn _type(args: libtype.CallMatch, scope: *Scope) Error!void {
-    std.log.info("in type: was '{s}'", .{@tagName(args.unnamed_args[0])});
+    // std.log.info("in type: was '{s}'", .{@tagName(args.unnamed_args[0])});
     if (args.unnamed_args[0] == .function_pointer) {
         scope.return_result = .{ .string = "function" };
     } else scope.return_result =
@@ -1155,6 +1155,19 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
+pub fn is_none(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const item = args.unnamed_args[0];
+    scope.return_result = .{ .boolean = item == .none };
+}
+
+pub fn assert(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const condition = args.unnamed_args[0];
+    const print_args = args.var_args orelse unreachable;
+    _ = condition;
+    _ = print_args;
+    _ = scope;
+}
+
 pub fn print(args: libtype.CallMatch, scope: *Scope) Error!void {
     if (args.var_args) |vars| {
         var has_printed = false;
@@ -1462,20 +1475,6 @@ pub fn default_iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
     }
 }
 
-fn custom_iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
-    std.debug.assert(args.unnamed_args.len == 3);
-    if (args.unnamed_args[0] != .function and args.unnamed_args[1] != .function) {
-        return Error.InvalidExpressoinType;
-    }
-
-    scope.return_result = try expression.Iterator.init(
-        scope.allocator,
-        args.unnamed_args[0].function, // next function
-        args.unnamed_args[1].function, // has_next function
-        try args.unnamed_args[2].clone(scope.allocator), // data
-    );
-}
-
 pub fn iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
     const next_fn = args.unnamed_args[0];
     const has_next_fn = args.unnamed_args[1];
@@ -1493,6 +1492,20 @@ pub fn iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
     );
 }
 
+pub fn custom_iterator(args: libtype.CallMatch, scope: *Scope) Error!void {
+    const source_iter = args.unnamed_args[0];
+    const next_fn = args.unnamed_args[1];
+    const has_next_fn = args.unnamed_args[2];
+    const peek_fn = args.unnamed_args[3];
+    scope.return_result = .{ .iterator = .{
+        .allocator = scope.allocator,
+        .data = try scope.allocator.dupe(Value, &.{source_iter}),
+        .next_fn = .{ .pointer = next_fn.function_pointer },
+        .has_next_fn = .{ .pointer = has_next_fn.function_pointer },
+        .peek_fn = .{ .pointer = peek_fn.function_pointer },
+    } };
+}
+
 pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
     std.debug.assert(args.unnamed_args[0] == .iterator);
     const iter = args.unnamed_args[0].iterator;
@@ -1508,6 +1521,10 @@ pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
         .builtin => |f| {
             try f(iter.data, scope);
         },
+        .pointer => {
+            std.log.err("todo: iterator next case pointer", .{});
+            return Error.NotImplemented;
+        },
     }
 }
 
@@ -1521,6 +1538,10 @@ pub fn iter_peek(args: libtype.CallMatch, scope: *Scope) Error!void {
             },
             .builtin => |f| {
                 try f(iter.data, scope);
+            },
+            .pointer => {
+                std.log.err("todo: iterator peek case pointer", .{});
+                return Error.NotImplemented;
             },
         }
     } else {
@@ -1542,6 +1563,10 @@ pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
         },
         .builtin => |f| {
             try f(iter.data, scope);
+        },
+        .pointer => {
+            std.log.err("todo: iterator has_next case pointer", .{});
+            return Error.NotImplemented;
         },
     }
 }

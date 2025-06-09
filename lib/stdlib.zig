@@ -52,6 +52,8 @@ pub fn match_runtime_call_args(exprs: []expression.Value, arity: expression.Arit
 
 const mappings = .{
     .{ "len", FunctionContext{ .function = &functions.length, .arity = .{ .unnamed_count = 1 } } },
+    .{ "is_none", FunctionContext{ .function = &functions.is_none, .arity = .{ .unnamed_count = 1 } } },
+    .{ "assert", FunctionContext{ .function = &functions.assert, .arity = .{ .unnamed_count = 1, .has_variadics = true } } },
     .{ "last", FunctionContext{ .function = &functions.last, .arity = .{ .unnamed_count = 3 } } },
     .{ "first", FunctionContext{ .function = &functions.first, .arity = .{ .unnamed_count = 3 } } },
     .{ "type", FunctionContext{ .function = &functions._type, .arity = .{ .unnamed_count = 1 } } },
@@ -75,9 +77,9 @@ const mappings = .{
     .{ "do", FunctionContext{ .function = &functions.map, .arity = .{ .unnamed_count = 2 } } },
     // .{ "flatmap", FunctionContext{ .function = &functions.flatmap, .arity = .{ .unnamed_count = 2 } } },
     .{ "zip", FunctionContext{ .function = &functions.zip, .arity = .{ .unnamed_count = 2 } } },
-    // .{ "flatten", FunctionContext{ .function = &functions.flatten, .arity = .{ .unnamed_count = 1 } } },
-    // .{ "reduce", FunctionContext{ .function = &functions.reduce, .arity = .{ .unnamed_count = 2 } } },
-    // .{ "group_by", FunctionContext{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
+    .{ "flatten", FunctionContext{ .function = &functions.flatten, .arity = .{ .unnamed_count = 1 } } },
+    .{ "reduce", FunctionContext{ .function = &functions.reduce, .arity = .{ .unnamed_count = 2 } } },
+    .{ "group_by", FunctionContext{ .function = &functions.group_by, .arity = .{ .unnamed_count = 2 } } },
     .{ "count", FunctionContext{ .function = &functions.count, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_all", FunctionContext{ .function = &functions.check_all, .arity = .{ .unnamed_count = 2 } } },
     .{ "check_any", FunctionContext{ .function = &functions.check_any, .arity = .{ .unnamed_count = 2 } } },
@@ -89,6 +91,7 @@ const mappings = .{
     // iterator functions
     .{ "iterator", FunctionContext{ .function = &functions.iterator, .arity = .{ .unnamed_count = 3 } } },
     .{ "default_iterator", FunctionContext{ .function = &functions.default_iterator, .arity = .{ .unnamed_count = 1 } } },
+    .{ "custom_iterator", FunctionContext{ .function = &functions.custom_iterator, .arity = .{ .unnamed_count = 4 } } },
     .{ "next", FunctionContext{ .function = &functions.iter_next, .arity = .{ .unnamed_count = 1 } } },
     .{ "peek", FunctionContext{ .function = &functions.iter_peek, .arity = .{ .unnamed_count = 1 } } },
     .{ "has_next", FunctionContext{ .function = &functions.iter_has_next, .arity = .{ .unnamed_count = 1 } } },
