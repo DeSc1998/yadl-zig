@@ -56,21 +56,6 @@ fn is_finished_frame(f: *const Frame) bool {
 
 fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
     var current_frame = m.frame_stack.items.len - 1;
-    // if (compiler.is_address_opcode(inst.op_code)) {
-    //     std.log.info("executing @ {:<4} {s:<10} {}", .{
-    //         m.frame_stack.items[current_frame].stack_ptr,
-    //         @tagName(inst.op_code),
-    //         inst.argument.address,
-    //     });
-    // } else {
-    //     std.log.info("executing @ {:<4} {s:<10} {} <- {} {}", .{
-    //         m.frame_stack.items[current_frame].stack_ptr,
-    //         @tagName(inst.op_code),
-    //         inst.argument.registers.destination,
-    //         inst.argument.registers.source_left,
-    //         inst.argument.registers.source_right,
-    //     });
-    // }
     switch (inst.op_code.major) {
         .Move => {
             if (inst.op_code.minor == .Immidiate) {
@@ -122,18 +107,20 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const context = stdlib.builtins.get(name) orelse unreachable;
             if (m.registers[0] != .number) {
                 std.log.err("argument count is not a number: type was {s}", .{@tagName(m.registers[0])});
-                std.log.err("current stack ptr: {}, inst count: {}", .{
-                    m.frame_stack.items[current_frame].stack_ptr,
-                    m.frame_stack.items[current_frame].program.instructions.len,
-                });
                 try print_trace(m);
                 return Error.IllegalValue;
             }
             const size: usize = @intCast(m.registers[0].number.integer);
             const tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
             defer m.value_stack.allocator.free(tmp);
+            var arg_index: usize = 0;
             for (tmp) |*out| {
-                out.* = m.value_stack.pop() orelse unreachable;
+                out.* = m.value_stack.pop() orelse {
+                    std.log.err("stack was empty: tried reading argument at {} from variadic arguments", .{arg_index});
+                    try print_trace(m);
+                    unreachable;
+                };
+                arg_index += 1;
             }
             const match = stdlib.match_call_args(tmp, context.arity) catch return Error.IllegalValue;
             var scope = Scope.empty(m.frame_stack.allocator, m.out);
@@ -193,10 +180,17 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             m.registers[regs.destination] = .{ .boolean = left.boolean or right.boolean };
         },
         .Push => {
-            const regs = inst.argument.registers;
-            const dest = regs.destination;
-            try m.value_stack.append(m.registers[dest]);
+            if (inst.op_code.minor == .Address) {
+                const addr = inst.argument.address;
+                const tmp = m.frame_stack.items[current_frame].program.memory[addr];
+                try m.value_stack.append(tmp);
+            } else {
+                const regs = inst.argument.registers;
+                const dest = regs.destination;
+                try m.value_stack.append(m.registers[dest]);
+            }
         },
+
         .Pop => {
             if (inst.op_code.minor == .Address) {
                 const addr = inst.argument.address;
@@ -327,14 +321,9 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     const tmp = m.frame_stack.items[current_frame].program.memory[left.address];
                     m.registers[regs.destination] = tmp;
                 } else {
-                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
                     std.log.err("accessed out of bound: memory size: {}, address: {}", .{
                         m.frame_stack.items[current_frame].program.memory.len,
                         left.address,
-                    });
-                    std.log.err("stack was empty @ sp = {}, f = {}", .{
-                        stack_ptr,
-                        current_frame,
                     });
                     try print_trace(m);
                     return Error.IllegalValue;
@@ -344,7 +333,13 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         .Capture => {
             const reg = inst.argument.registers;
             const val = m.registers[reg.source_left];
-            std.debug.assert(m.registers[reg.destination] == .function_pointer);
+            if (m.registers[reg.destination] != .function_pointer) {
+                std.log.err("destination was not a function_pointer: was {s}", .{
+                    @tagName(m.registers[reg.destination]),
+                });
+                try print_trace(m);
+                return Error.IllegalValue;
+            }
             const fp = m.registers[reg.destination].function_pointer;
             const source = &(compiler.compiled_sources orelse unreachable).items[fp.source_address];
             const function = &source.functions[fp.function_address];
@@ -435,6 +430,11 @@ fn print_trace(m: *Maschine) !void {
     const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
     const total_instructions = frame.program.instructions.len;
     const view_size: usize = @min(10, @max(total_instructions - base, 0));
+    std.log.err("current stack ptr: {}, frame: {}, inst count: {}", .{
+        frame.stack_ptr,
+        m.frame_stack.items.len - 1,
+        frame.program.instructions.len,
+    });
     writer.print("---- instruction view -----------\n", .{}) catch unreachable;
     for (0..view_size) |index| {
         const current = base + index;
