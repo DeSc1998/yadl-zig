@@ -1259,8 +1259,7 @@ test "simple if else statement" {
     const input =
         \\if (true) {
         \\    aoeu = aoeu
-        \\}
-        \\else {
+        \\} else {
         \\ test()
         \\}
     ;
@@ -1303,8 +1302,7 @@ test "failing.if.missing-end" {
     const input =
         \\if (true) {
         \\    aoeu = aoeu
-        \\}
-        \\else {
+        \\} else {
         \\ test()
     ;
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
