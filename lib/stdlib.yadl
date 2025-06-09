@@ -18,10 +18,18 @@ map = (items, func) => {
             index = index + 1
         }
         return out
+    } elif (type(items) == 'iterator') {
+        next_fn = (source) => func(next(source))
+        has_next_fn = (source) => has_next(source)
+        peek_fn = (source) => func(peek(source))
+
+        return custom_iterator(items, next_fn, has_next_fn, peek_fn)
     } else {
         return func(items)
     }
 }
+
+do = (items, func) => map(items, func)
 
 flatten = (items) => {
     if (type(items) == 'array') {
@@ -32,15 +40,41 @@ flatten = (items) => {
             index = index + 1
         }
         return out
+    } elif (type(items) == 'iterator') {
+        context = {}
+        context['source'] = items
+        context['current'] = none
+        next_fn = (context) => {
+            if (not is_none(context['current']) and has_next(context['current'])) {
+                context['current'] = default_iterator(next(context['source']))
+            }
+            return next(context['current'])
+        }
+        has_next_fn = (context) => {
+            if (is_none(context['current'])) {
+                return has_next(context['source'])
+            } else {
+                if (has_next(context['current'])) {
+                    return true
+                } else {
+                    return has_next(context['source'])
+                }
+            }
+        }
+        peek_fn = (context) => {
+            if (not is_none(context['current']) and has_next(context['current'])) {
+                context['current'] = default_iterator(next(context['source']))
+            }
+            return peek(context['current'])
+        }
+
+        return custom_iterator(context, next_fn, has_next_fn, peek_fn)
     } else {
         return items
     }
 }
 
-flatmap = (items, func) => {
-    tmp = map(items, func)
-    return flatten(tmp)
-}
+flatmap = (items, func) => flatten(map(items, func))
 
 filter = (items, pred) => {
     if (type(items) == 'array') {
@@ -78,7 +112,7 @@ group_by = (items, groupper) => {
         index = 0
         while (index < len(items)) {
             key = groupper(items[index])
-            if (not bool(out[key])) {
+            if (is_none(out[key])) {
                 tmp = filter(items, (x) => groupper(x) == key)
                 out[key] = tmp
             }
@@ -140,4 +174,52 @@ sort = (items, compare) => {
     return items
 }
 
-call = (source, function_name, args...) => none
+first = (items, pred, default) => {
+    if (type(items) == 'array') {
+        index = 0
+        while (index < len(items)) {
+            if (pred(items[index])) {
+                return items[index]
+            }
+            index = index + 1
+        }
+        return default
+    } else {
+        return default
+    }
+}
+
+last = (items, pred, default) => {
+    if (type(items) == 'array') {
+        index = len(items) - 1
+        while (index >= 0) {
+            if (pred(items[index])) {
+                return items[index]
+            }
+            index = index - 1
+        }
+        return default
+    } else {
+        return default
+    }
+}
+
+check_impl = (items, pred, init, func) => {
+    if (type(items) == 'array') {
+        index = 0
+        out = init
+        while (index < len(items)) {
+            out = func(out, pred(items[index]))
+            index = index + 1
+        }
+        return out
+    } else {
+        return init
+    }
+}
+
+count = (items, pred) => check_impl(items, pred, 0, (acc, value) => number(value) + acc)
+check_none = (items, pred) => check_impl(items, pred, true, (acc, value) => not value and acc)
+check_any = (items, pred) => check_impl(items, pred, false, (acc, value) => value or acc)
+check_all = (items, pred) => check_impl(items, pred, true, (acc, value) => value and acc)
+
