@@ -173,78 +173,26 @@ pub const Instruction = packed struct(u32) {
     }
 
     pub fn dump(self: Instruction, file: std.fs.File, offset: usize) !void {
-        if (!file.isTty()) {
-            try self.dump_to_file(file, offset);
-        } else {
-            try self.dump_to_console(file, offset);
-        }
-    }
-
-    fn dump_to_file(self: Instruction, file: std.fs.File, offset: usize) !void {
-        const writer = file.writer();
-        try writer.print(" 0x{X:0>6}", .{offset});
-        if (is_address_opcode(self.op_code)) {
-            const addr = self.argument.address;
-            try writer.print(" {s:<10}", .{@tagName(self.op_code.major)});
-            try writer.print(" 0x{X:0>6}", .{addr});
-            if (self.op_code.major == .Jmp) {
-                if (self.argument.address > offset) {
-                    _ = try writer.write(" // end of positive if branch");
-                } else {
-                    _ = try writer.write(" // end of while loop");
-                }
-            } else if (self.op_code.major == .CallIntr) {
-                const name = stdlib.builtins.keys()[self.argument.address];
-                _ = try writer.print(" // Intrinsic: {s}", .{name});
-            } else if (self.op_code.major == .CallStd) {
-                const source = &(compiled_sources orelse unreachable).items[0];
-                var iter = source.function_table.iterator();
-                while (iter.next()) |entry| {
-                    if (addr == entry.value_ptr.offset) {
-                        _ = try writer.print(" // Std Function: {s}", .{entry.key_ptr.*});
-                        break;
-                    }
-                }
-            }
-        } else {
-            const regs = self.argument.registers;
-            var tmp: [32]u8 = undefined;
-            const name = try std.fmt.bufPrint(&tmp, "{s}{s}", .{
-                @tagName(self.op_code.major),
-                if (self.op_code.minor == .Immidiate) "Imm" else "",
-            });
-            try writer.print(" {s:<8}", .{name});
-            switch (self.op_code.major) {
-                .Move, .Not, .Read, .Write => try writer.print(" {} <- {}", .{
-                    regs.destination,
-                    regs.source_left,
-                }),
-                .Push, .Pop => try writer.print(" {}", .{regs.destination}),
-                else => try writer.print(" {} <- {} {}", .{
-                    regs.destination,
-                    regs.source_left,
-                    regs.source_right,
-                }),
-            }
-        }
-        _ = try writer.write("\n");
-    }
-
-    fn dump_to_console(self: Instruction, file: std.fs.File, offset: usize) !void {
         const tty_config = std.io.tty.detectConfig(file);
+        const is_tty = file.isTty();
         const writer = file.writer();
         try writer.print(" 0x{X:0>6}", .{offset});
         if (is_address_opcode(self.op_code)) {
             const addr = self.argument.address;
             const color = color_of(self.op_code);
             const boldness = boldness_of(self.op_code);
-            try std.io.tty.Config.setColor(tty_config, writer, color);
-            try std.io.tty.Config.setColor(tty_config, writer, boldness);
+            if (is_tty) {
+                try std.io.tty.Config.setColor(tty_config, writer, color);
+                try std.io.tty.Config.setColor(tty_config, writer, boldness);
+            }
             try writer.print(" {s:<10}", .{@tagName(self.op_code.major)});
-            try std.io.tty.Config.setColor(tty_config, writer, .reset);
+            if (is_tty)
+                try std.io.tty.Config.setColor(tty_config, writer, .reset);
             try writer.print(" 0x{X:0>6}", .{addr});
-            try std.io.tty.Config.setColor(tty_config, writer, .green);
-            try std.io.tty.Config.setColor(tty_config, writer, .dim);
+            if (is_tty) {
+                try std.io.tty.Config.setColor(tty_config, writer, .green);
+                try std.io.tty.Config.setColor(tty_config, writer, .dim);
+            }
             if (self.op_code.major == .Jmp) {
                 if (self.argument.address > offset) {
                     _ = try writer.write(" // end of positive if branch");
@@ -264,18 +212,21 @@ pub const Instruction = packed struct(u32) {
                     }
                 }
             }
-            try std.io.tty.Config.setColor(tty_config, writer, .reset);
+            if (is_tty)
+                try std.io.tty.Config.setColor(tty_config, writer, .reset);
         } else {
             const regs = self.argument.registers;
             const color = color_of(self.op_code);
             var tmp: [32]u8 = undefined;
-            try std.io.tty.Config.setColor(tty_config, writer, color);
+            if (is_tty)
+                try std.io.tty.Config.setColor(tty_config, writer, color);
             const name = try std.fmt.bufPrint(&tmp, "{s}{s}", .{
                 @tagName(self.op_code.major),
                 if (self.op_code.minor == .Immidiate) "Imm" else "",
             });
             try writer.print(" {s:<8}", .{name});
-            try std.io.tty.Config.setColor(tty_config, writer, .reset);
+            if (is_tty)
+                try std.io.tty.Config.setColor(tty_config, writer, .reset);
             switch (self.op_code.major) {
                 .Move, .Not, .Read, .Write => try writer.print(" {} <- {}", .{
                     regs.destination,
@@ -337,7 +288,7 @@ pub const CompiledSource = struct {
                 }
             }
             if (!function_found) {
-                try writer.print("anonimous-function @ {}:\n", .{offset});
+                try writer.print("anonimous-function @ 0x{X}:\n", .{offset});
             }
             for (f.memory, 0..) |v, index| {
                 try writer.print("  memory @ 0x{X}: {s} ", .{ index, @tagName(v) });
@@ -379,14 +330,12 @@ const Compiler = struct {
     const load_address: u8 = 255;
 
     fn init(allocator: std.mem.Allocator) Compiler {
-        var tmp = std.ArrayList(value.Value).init(allocator);
-        tmp.append(value.Value{ .number = .{ .integer = 0 } }) catch @panic("OOM");
         return .{
             .main = std.ArrayList(Instruction).init(allocator),
             .functions = std.ArrayList(Program).init(allocator),
             .function_table = FunctionTable.init(allocator),
             .var_table = VariableTable.init(allocator),
-            .static_mem = tmp,
+            .static_mem = std.ArrayList(value.Value).init(allocator),
         };
     }
 
@@ -433,7 +382,8 @@ pub fn compile_stdlib(allocator: std.mem.Allocator) Error!*CompiledSource {
         std.debug.assert(sources.items.len > 0);
         return &sources.items[0];
     } else {
-        const lib_source = @import("yadl-stdlib").source;
+        // const lib_source = @import("yadl-stdlib").source;
+        const lib_source = @embedFile("stdlib.yadl");
         var parser = Parser.init(lib_source, allocator);
         const statements = parser.parse() catch |err| {
             std.log.err("not implemented: handling of failed parsing: {}", .{err});
@@ -491,7 +441,7 @@ fn compile_program(compiler: *Compiler, statements: []const statement.Statement)
 fn compile_function(
     compiler: *Compiler,
     func: expression.Function,
-    func_slot: ?*Program,
+    func_index: ?usize,
 ) Error!FunctionData {
     var tmp = compiler.local();
     // NOTE: anything which is either local or does not need to be captured (i. e. stdlib functions)
@@ -547,8 +497,8 @@ fn compile_function(
     const tmp_funcs = try tmp.functions.toOwnedSlice();
     defer tmp.functions.allocator.free(tmp_funcs);
     try compiler.functions.appendSlice(tmp_funcs);
-    if (func_slot) |slot| {
-        slot.* = prog;
+    if (func_index) |index| {
+        compiler.functions.items[index] = prog;
         return FunctionData{
             .offset = 0,
             .source_offset = 0,
@@ -666,14 +616,12 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
     }
 
     if (arity.var_args) |id| {
-        const var_count = expression.Expression{ .value = .{ .number = .{ .integer = @intCast(arity.args.len) } } };
-        const constant_two = expression.Expression{ .value = .{ .number = .{ .integer = 2 } } };
         // layout(0..4): [compare_res, tmp_array, var_arg_count]
         const compare_reg: u8 = 0;
         const tmp_array_reg: u8 = 1;
         const arg_count_reg: u8 = 2;
         // var_arg_count = total_var_count - named_var_count
-        try compile_expression(compiler, &var_count, Compiler.load_address);
+        try compiler.main.append(Instruction.immidiate(.Move, Compiler.load_address, @truncate(arity.args.len)));
         try compiler.main.append(Instruction.register(.Sub, arg_count_reg, 0, Compiler.load_address));
         // tmp_array = []
         const empty_array = expression.Expression{ .value = .{ .array = &.{} } };
@@ -681,22 +629,19 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
 
         const start_loop = @as(u24, @truncate(compiler.main.items.len));
         // while (var_arg_count != 0) {
-        try compiler.main.append(Instruction.immidiate(.Read, 3, 0));
-        try compiler.main.append(
-            Instruction.register(.CmpEq, compare_reg, arg_count_reg, 3),
-        );
+        try compiler.main.append(Instruction.immidiate(.Move, 4, 0));
+        try compiler.main.append(Instruction.register(.CmpEq, compare_reg, arg_count_reg, 4));
         try compiler.main.append(Instruction.register(.Not, compare_reg, compare_reg, null));
         const jmp_index = @as(u24, @truncate(compiler.main.items.len));
         try compiler.main.append(Instruction.address(.JmpOnFalse, 0));
         // tmp_array = append(tmp_array, tmp_arg)
         try compiler.main.append(Instruction.register(.Push, tmp_array_reg, null, null));
-        try compile_expression(compiler, &constant_two, 0);
+        try compiler.main.append(Instruction.immidiate(.Move, 0, 2));
         const addr = stdlib.builtins.getIndex("append") orelse unreachable;
         try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
         try compiler.main.append(Instruction.register(.Move, tmp_array_reg, 0, null));
         // var_arg_count -= 1
-        const one = expression.Expression{ .value = .{ .number = .{ .integer = 1 } } };
-        try compile_expression(compiler, &one, Compiler.load_address);
+        try compiler.main.append(Instruction.immidiate(.Move, Compiler.load_address, 1));
         try compiler.main.append(
             Instruction.register(.Sub, arg_count_reg, arg_count_reg, Compiler.load_address),
         );
@@ -706,11 +651,10 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         // }
 
         const var_addr = compiler.static_mem.items.len;
+        // std.log.info("address of {s}: {}", .{ id.name, var_addr });
         try compiler.static_mem.append(value.Value{ .none = null });
         try compiler.var_table.put(id.name, var_addr);
-        const address: expression.Expression = .{ .value = .{ .address = var_addr } };
-        try compile_expression(compiler, &address, 0);
-        try compiler.main.append(Instruction.register(.Write, 0, tmp_array_reg, null));
+        try compiler.main.append(Instruction.immidiate(.Write, tmp_array_reg, @truncate(var_addr)));
     }
 }
 
@@ -732,9 +676,9 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
                     .source_offset = if (compiled_sources) |ss| ss.items.len else 0,
                     .arity = func.arity,
                 });
-                const func_slot = try compiler.functions.addOne();
-                // std.log.info("compiling function: {s}", .{a.varName.name});
-                const data = try compile_function(compiler, func, func_slot);
+                try compiler.functions.append(.{ .instructions = &.{}, .memory = &.{} });
+                const func_index = compiler.functions.items.len - 1;
+                const data = try compile_function(compiler, func, func_index);
                 if (data.captures) |cs| {
                     const tmp = compiler.function_table.getPtr(a.varName.name) orelse unreachable;
                     tmp.captures = cs;
@@ -742,23 +686,18 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
                 return;
             }
 
-            if (compiler.var_table.get(a.varName.name)) |addr| {
-                if (addr <= std.math.maxInt(u16)) {
-                    try compile_expression(compiler, a.value, 1);
-                    try compiler.main.append(Instruction.immidiate(.Write, 1, @intCast(addr)));
-                } else {
-                    const address_value: expression.Expression = .{ .value = .{ .address = addr } };
-                    try compile_expression(compiler, a.value, 1);
-                    try compile_expression(compiler, &address_value, Compiler.load_address);
-                    try compiler.main.append(Instruction.register(.Write, Compiler.load_address, 1, null));
-                }
-            } else {
-                const addr: usize = compiler.static_mem.items.len;
-                try compiler.static_mem.append(value.Value{ .none = null });
+            const addr = if (compiler.var_table.get(a.varName.name)) |addr| addr else compiler.static_mem.items.len;
+            if (!compiler.var_table.contains(a.varName.name)) {
                 try compiler.var_table.put(a.varName.name, addr);
-                const address: expression.Expression = .{ .value = .{ .address = addr } };
+                try compiler.static_mem.append(.{ .none = null });
+            }
+            if (addr <= std.math.maxInt(u16)) {
                 try compile_expression(compiler, a.value, 1);
-                try compile_expression(compiler, &address, Compiler.load_address);
+                try compiler.main.append(Instruction.immidiate(.Write, 1, @intCast(addr)));
+            } else {
+                const address_value: expression.Expression = .{ .value = .{ .address = addr } };
+                try compile_expression(compiler, a.value, 1);
+                try compile_expression(compiler, &address_value, Compiler.load_address);
                 try compiler.main.append(Instruction.register(.Write, Compiler.load_address, 1, null));
             }
         },
@@ -834,16 +773,27 @@ fn compile_call_arguments(
         return Error.ToManyArguments;
     }
     for (0..args.len) |rev_index| {
-        try compile_expression(compiler, &args[args.len - 1 - rev_index], target);
-        try compiler.main.append(Instruction.register(.Push, target, null, null));
+        const current_arg = &args[args.len - 1 - rev_index];
+        if (current_arg.* == .identifier) {
+            const id = current_arg.identifier;
+            if (compiler.var_table.get(id.name)) |addr| {
+                try compiler.main.append(Instruction.address(.Push, @intCast(addr)));
+            } else {
+                try compile_expression(compiler, current_arg, target);
+                try compiler.main.append(Instruction.register(.Push, target, null, null));
+            }
+        } else {
+            try compile_expression(compiler, current_arg, target);
+            try compiler.main.append(Instruction.register(.Push, target, null, null));
+        }
     }
     const tmp = expression.Expression{ .value = .{ .number = .{ .integer = @intCast(args.len) } } };
     try compile_expression(compiler, &tmp, 0);
 }
 
 fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, target: u8) Error!void {
-    if (target != 0)
-        try compiler.main.append(Instruction.register(.Push, 0, null, null));
+    // if (target != 0)
+    //     try compiler.main.append(Instruction.register(.Push, 0, null, null));
 
     if (fc.func.* != .identifier) {
         // NOTE: it is assumed that the expression is a compiled function
@@ -909,7 +859,7 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
     }
     if (target != 0) {
         try compiler.main.append(Instruction.register(.Move, target, 0, null));
-        try compiler.main.append(Instruction.register(.Pop, 0, null, null));
+        // try compiler.main.append(Instruction.register(.Pop, 0, null, null));
     }
 }
 
@@ -1175,7 +1125,7 @@ fn compile_binary_expression(
             expression.CompareOps.LessEqual => {
                 try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
                 try compiler.main.append(Instruction.register(.CmpLess, left, left, right));
-                try compiler.main.append(Instruction.register(.And, target, target, left));
+                try compiler.main.append(Instruction.register(.Or, target, target, left));
             },
             expression.CompareOps.NotEqual => {
                 try compiler.main.append(Instruction.register(.CmpEq, target, left, right));
