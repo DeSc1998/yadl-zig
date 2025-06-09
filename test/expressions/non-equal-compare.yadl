@@ -1,0 +1,29 @@
+// RUN: DEFAULT
+
+print("0 < 0:", 0 < 0 )
+print("0 < 1:", 0 < 1 )
+print("1 < 0:", 1 < 0 )
+// CHECK-OUT: 0 < 0: false
+// CHECK-OUT: 0 < 1: true
+// CHECK-OUT: 1 < 0: false
+
+print("0 > 1:", 0 > 1 )
+print("0 > 0:", 0 > 0 )
+print("1 > 0:", 1 > 0 )
+// CHECK-OUT: 0 > 1: false
+// CHECK-OUT: 0 > 0: false
+// CHECK-OUT: 1 > 0: true
+
+print("0 <= 0:", 0 <= 0 )
+print("0 <= 1:", 0 <= 1 )
+print("1 <= 0:", 1 <= 0 )
+// CHECK-OUT: 0 <= 0: true
+// CHECK-OUT: 0 <= 1: true
+// CHECK-OUT: 1 <= 0: false
+
+print("0 >= 0:", 0 >= 0 )
+print("0 >= 1:", 0 >= 1 )
+print("1 >= 0:", 1 >= 0 )
+// CHECK-OUT: 0 >= 0: true
+// CHECK-OUT: 0 >= 1: false
+// CHECK-OUT: 1 >= 0: true
