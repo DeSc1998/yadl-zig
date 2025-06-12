@@ -825,6 +825,13 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
                 .has_variadics = if (data.arity.var_args) |_| true else false,
             },
         };
+        // NOTE: evaluates captures in case of a function_pointer
+        try compile_value(compiler, .{ .function_pointer = .{
+            .arity = data.arity,
+            .function_address = data.offset,
+            .captures = data.captures,
+            .source_address = data.source_offset,
+        } }, target);
         try compile_call_arguments(compiler, fc.args, target, context);
         try compiler.main.append(Instruction.address(.CallStd, addr));
     } else if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
@@ -833,6 +840,13 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
         try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
     } else if (compiler.get_function(fc.func.identifier.name)) |data| {
         const addr = data.offset;
+        // NOTE: evaluates captures in case of a function_pointer
+        try compile_value(compiler, .{ .function_pointer = .{
+            .arity = data.arity,
+            .function_address = data.offset,
+            .captures = data.captures,
+            .source_address = data.source_offset,
+        } }, target);
         try compile_call_arguments(compiler, fc.args, target, .{
             .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
             .arity = .{
