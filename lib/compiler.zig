@@ -58,9 +58,6 @@ pub const MajorCode = enum(u6) {
     /// puts `source_right` at `source_left` (aka capture index)
     /// in the function pointer at `destination`
     Capture,
-    /// puts `source_right` at `source_left` (aka capture index)
-    /// in the function pointer at `destination`
-    // ReadCapture,
 
     // Address OpCodes
     // layout: (op_code, address)
@@ -68,10 +65,6 @@ pub const MajorCode = enum(u6) {
     Jmp,
     /// NOTE: does not advance the stack pointer after jump
     JmpOnFalse,
-
-    // /// `address` is interpreted as size.
-    // /// puts the returned address at `Compiler.var_offset - 1`
-    // Allocate,
 
     /// call arguments are expected to be on the stack.
     /// first argument is on the top
