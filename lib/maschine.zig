@@ -88,8 +88,9 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const pointer = func.function_pointer;
             const sources = compiler.compiled_sources orelse unreachable;
             const source = &sources.items[pointer.source_address];
+            const program = source.functions[pointer.function_address];
             try m.frame_stack.append(.{
-                .program = source.functions[pointer.function_address],
+                .program = program,
             });
             return;
         },
@@ -341,8 +342,17 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 return Error.IllegalValue;
             }
             const fp = m.registers[reg.destination].function_pointer;
+            // if (fp.captures) |captures| {
+            //     var iter = captures.valueIterator();
+            //     while (iter.next()) |entry_value| {
+            //         if (entry_value.addr == reg.source_right) {
+            //             entry_value.val = val;
+            //             break;
+            //         }
+            //     }
+            // }
             const source = &(compiler.compiled_sources orelse unreachable).items[fp.source_address];
-            const function = &source.functions[fp.function_address];
+            const function = source.functions[fp.function_address];
             function.memory[reg.source_right] = val;
         },
     }

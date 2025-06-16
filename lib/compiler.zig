@@ -247,9 +247,12 @@ pub const Program = struct {
     memory: []value.Value = &.{},
 };
 
-pub const CaptureMap = std.StringHashMap(usize);
-
+const Capture = struct {
+    addr: usize,
+    val: value.Value = .{ .none = null },
 };
+pub const CaptureMap = std.StringHashMap(Capture);
+
 // const FunctionData = struct {
 //     offset: u24,
 //     source_offset: usize,
@@ -466,10 +469,10 @@ fn compile_function(
     }
 
     try externals_of_function(func, &externals, &locals);
-    var captures = std.StringHashMap(usize).init(compiler.main.allocator);
+    var captures = std.StringHashMap(Capture).init(compiler.main.allocator);
     for (externals.items) |ext| {
         const offset = tmp.static_mem.items.len;
-        try captures.put(ext.name, offset);
+        try captures.put(ext.name, .{ .addr = offset });
         try tmp.var_table.put(ext.name, offset);
         try tmp.static_mem.append(.{ .none = null });
     }
@@ -960,7 +963,6 @@ fn compile_value(compiler: *Compiler, v: value.Value, target: u8) Error!void {
     const val = sw: switch (v) {
         .function => {
             const data = try compile_function(compiler, v.function, null);
-
             break :sw value.Value{ .function_pointer = data };
         },
         .number => |n| {
@@ -992,12 +994,12 @@ fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) 
     if (fp.captures) |captures| {
         var iter = captures.iterator();
         while (iter.next()) |entry| {
-            const capture_addr = entry.value_ptr.*;
+            const capture = entry.value_ptr;
             const maybe_addr = compiler.var_table.get(entry.key_ptr.*);
             if (maybe_addr) |addr| {
                 try compiler.main.append(Instruction.immidiate(.Read, target + 1, @intCast(addr)));
                 try compiler.main.append(
-                    Instruction.register(.Capture, target, target + 1, @intCast(capture_addr)),
+                    Instruction.register(.Capture, target, target + 1, @intCast(capture.addr)),
                 );
             } else {
                 const data = compiler.get_function(entry.key_ptr.*) orelse {
@@ -1007,7 +1009,7 @@ fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) 
                 const tmp: value.Value = .{ .function_pointer = data };
                 try compile_value(compiler, tmp, target + 1);
                 try compiler.main.append(
-                    Instruction.register(.Capture, target, target + 1, @intCast(capture_addr)),
+                    Instruction.register(.Capture, target, target + 1, @intCast(capture.addr)),
                 );
             }
         }
