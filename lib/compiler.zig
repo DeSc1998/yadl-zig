@@ -19,6 +19,11 @@ pub const Error = error{
     ParserError,
 } || std.mem.Allocator.Error;
 
+const ComptimeValueError = error{
+    HasFunctionCall,
+    NonComptimeVariable,
+};
+
 pub const MajorCode = enum(u6) {
     // Register OpCodes
     // layout: (op_code, destination, source_left, source_right)
@@ -51,11 +56,11 @@ pub const MajorCode = enum(u6) {
     CallValue,
 
     /// as Register: reads at address `source_left`
-    /// as Immidiate: reads the value `value` to `destination`
+    /// as Immidiate: reads the value at `value` to `destination`
     Read,
     /// writes `source_left` at address `destination`
     Write,
-    /// puts `source_right` at `source_left` (aka capture index)
+    /// puts `source_left` at `source_right` (aka offset in memory of the function)
     /// in the function pointer at `destination`
     Capture,
 
@@ -199,7 +204,7 @@ pub const Instruction = packed struct(u32) {
                 const source = &(compiled_sources orelse unreachable).items[0];
                 var iter = source.function_table.iterator();
                 while (iter.next()) |entry| {
-                    if (addr == entry.value_ptr.offset) {
+                    if (addr == entry.value_ptr.function_address) {
                         _ = try writer.print(" // Std Function: {s}", .{entry.key_ptr.*});
                         break;
                     }
@@ -244,13 +249,14 @@ pub const Program = struct {
 
 pub const CaptureMap = std.StringHashMap(usize);
 
-const FunctionData = struct {
-    offset: u24,
-    source_offset: usize,
-    arity: expression.Arity,
-    captures: ?CaptureMap = null,
 };
-const FunctionTable = std.StringHashMap(FunctionData);
+// const FunctionData = struct {
+//     offset: u24,
+//     source_offset: usize,
+//     arity: expression.Arity,
+//     captures: ?CaptureMap = null,
+// };
+const FunctionTable = std.StringHashMap(value.FunctionPointer);
 const VariableTable = std.StringHashMap(usize);
 
 pub const CompiledSource = struct {
@@ -272,15 +278,12 @@ pub const CompiledSource = struct {
         const writer = file.writer();
         for (self.functions, 0..) |f, offset| {
             var iter = self.function_table.iterator();
-            var function_found = false;
             while (iter.next()) |entry| {
-                if (entry.value_ptr.offset == offset) {
+                if (entry.value_ptr.function_address == offset) {
                     try writer.print("{s} @ 0x{X}:\n", .{ entry.key_ptr.*, offset });
-                    function_found = true;
                     break;
                 }
-            }
-            if (!function_found) {
+            } else {
                 try writer.print("anonimous-function @ 0x{X}:\n", .{offset});
             }
             for (f.memory, 0..) |v, index| {
@@ -340,11 +343,11 @@ const Compiler = struct {
         return tmp;
     }
 
-    fn get_function(self: *Compiler, name: []const u8) ?FunctionData {
+    fn get_function(self: *Compiler, name: []const u8) ?value.FunctionPointer {
         return self.function_table.get(name) orelse if (self.root) |p| p.get_function(name) else null;
     }
 
-    fn get_stdlib_function(self: *Compiler, name: []const u8) ?FunctionData {
+    fn get_stdlib_function(self: *Compiler, name: []const u8) ?value.FunctionPointer {
         if (self.stdlib) |lib| {
             return lib.function_table.get(name) orelse null;
         } else return null;
@@ -435,7 +438,7 @@ fn compile_function(
     compiler: *Compiler,
     func: expression.Function,
     func_index: ?usize,
-) Error!FunctionData {
+) Error!value.FunctionPointer {
     var tmp = compiler.local();
     // NOTE: anything which is either local or does not need to be captured (i. e. stdlib functions)
     var locals = std.StringHashMap(?void).init(compiler.main.allocator);
@@ -492,18 +495,18 @@ fn compile_function(
     try compiler.functions.appendSlice(tmp_funcs);
     if (func_index) |index| {
         compiler.functions.items[index] = prog;
-        return FunctionData{
-            .offset = 0,
-            .source_offset = 0,
+        return .{
+            .function_address = 0,
+            .source_address = 0,
             .arity = func.arity,
             .captures = captures,
         };
     } else {
         const offset: u24 = tmp.global_function_offset();
         try compiler.functions.append(prog);
-        return FunctionData{
-            .offset = offset,
-            .source_offset = if (compiled_sources) |ss| ss.items.len else 0,
+        return .{
+            .function_address = offset,
+            .source_address = if (compiled_sources) |ss| ss.items.len else 0,
             .arity = func.arity,
             .captures = captures,
         };
@@ -665,8 +668,8 @@ fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKin
                 const func = a.value.value.function;
                 const addr: u24 = compiler.global_function_offset();
                 try compiler.function_table.put(a.varName.name, .{
-                    .offset = addr,
-                    .source_offset = if (compiled_sources) |ss| ss.items.len else 0,
+                    .function_address = addr,
+                    .source_address = if (compiled_sources) |ss| ss.items.len else 0,
                     .arity = func.arity,
                 });
                 try compiler.functions.append(.{ .instructions = &.{}, .memory = &.{} });
@@ -810,7 +813,7 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
     }
 
     if (compiler.get_stdlib_function(fc.func.identifier.name)) |data| {
-        const addr = data.offset;
+        const addr = data.function_address;
         const context: stdlib.FunctionContext = .{
             .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
             .arity = .{
@@ -821,9 +824,9 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
         // NOTE: evaluates captures in case of a function_pointer
         try compile_value(compiler, .{ .function_pointer = .{
             .arity = data.arity,
-            .function_address = data.offset,
+            .function_address = data.function_address,
             .captures = data.captures,
-            .source_address = data.source_offset,
+            .source_address = data.source_address,
         } }, target);
         try compile_call_arguments(compiler, fc.args, target, context);
         try compiler.main.append(Instruction.address(.CallStd, addr));
@@ -832,13 +835,13 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
         try compile_call_arguments(compiler, fc.args, target, context);
         try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
     } else if (compiler.get_function(fc.func.identifier.name)) |data| {
-        const addr = data.offset;
+        const addr = data.function_address;
         // NOTE: evaluates captures in case of a function_pointer
         try compile_value(compiler, .{ .function_pointer = .{
             .arity = data.arity,
-            .function_address = data.offset,
+            .function_address = data.function_address,
             .captures = data.captures,
-            .source_address = data.source_offset,
+            .source_address = data.source_address,
         } }, target);
         try compile_call_arguments(compiler, fc.args, target, .{
             .function = @ptrFromInt(std.math.maxInt(usize)), // NOTE: function ptr is not used here
@@ -917,45 +920,35 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                     try compile_expression(compiler, &address, Compiler.load_address);
                     try compiler.main.append(Instruction.register(.Read, target, Compiler.load_address, null));
                 }
-            } else if (compiler.get_function(id.name)) |data| {
+            } else if (compiler.get_function(id.name)) |ptr| {
                 const offset: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
-                const fp = value.FunctionPointer{
-                    .function_address = data.offset,
-                    .source_address = if (compiled_sources) |ss| ss.items.len else 0,
-                    .arity = data.arity,
-                };
-                try compiler.static_mem.append(.{ .function_pointer = fp });
+                try compiler.static_mem.append(.{ .function_pointer = ptr });
                 try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(offset)));
             } else {
                 std.log.err("undefined variable: {s}", .{id.name});
                 return Error.UndefinedVariable;
             }
         },
-        .array => |xs| {
-            if (!all_comptime_values(xs.elements)) {
-                std.log.err("array can not be evaluated at compile time", .{});
-                return Error.NonComptimeValue;
-            }
-            const tmp: []value.Value = try compiler.main.allocator.alloc(value.Value, xs.elements.len);
-            for (tmp, xs.elements) |*out, elem| {
-                out.* = try eval_expression(compiler.main.allocator, elem);
-            }
-            const array = value.Value{ .array = tmp };
-            const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
-            try compiler.static_mem.append(array);
-            try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
-        },
-        .dictionary => |dict| {
-            if (!all_comptime_entry(dict.entries)) {
-                std.log.err("dictionary can not be evaluated at compile time", .{});
-                return Error.NonComptimeValue;
-            }
-            var tmp = try value.Dictionary.empty(compiler.main.allocator);
-            for (dict.entries) |entry| {
-                const key = try eval_expression(compiler.main.allocator, entry.key.*);
-                const val = try eval_expression(compiler.main.allocator, entry.value.*);
-                try tmp.dictionary.entries.put(key, val);
-            }
+        .array, .dictionary => {
+            check_comptime_value(expr.*) catch |err| {
+                switch (err) {
+                    ComptimeValueError.HasFunctionCall => {
+                        std.log.err(
+                            "{s} can not be evaluated at compile time: {s}",
+                            .{ @tagName(expr.*), "contains a function call" },
+                        );
+                        return Error.NonComptimeValue;
+                    },
+                    ComptimeValueError.NonComptimeVariable => {
+                        std.log.err(
+                            "{s} can not be evaluated at compile time: {s}",
+                            .{ @tagName(expr.*), "referenced variable is not compile time known" },
+                        );
+                        return Error.NonComptimeValue;
+                    },
+                }
+            };
+            const tmp = try eval_expression(compiler.main.allocator, expr.*);
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
             try compiler.static_mem.append(tmp);
             try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
@@ -968,12 +961,7 @@ fn compile_value(compiler: *Compiler, v: value.Value, target: u8) Error!void {
         .function => {
             const data = try compile_function(compiler, v.function, null);
 
-            break :sw value.Value{ .function_pointer = .{
-                .function_address = data.offset,
-                .source_address = if (compiled_sources) |ss| ss.items.len else 0,
-                .arity = v.function.arity,
-                .captures = data.captures,
-            } };
+            break :sw value.Value{ .function_pointer = data };
         },
         .number => |n| {
             if (n == .integer and n.integer <= std.math.maxInt(u16) and n.integer >= 0) {
@@ -1016,12 +1004,7 @@ fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) 
                     std.log.err("no local value found for capture '{s}'", .{entry.key_ptr.*});
                     return Error.UndefinedVariable;
                 };
-                const tmp: value.Value = .{ .function_pointer = .{
-                    .function_address = data.offset,
-                    .source_address = data.source_offset,
-                    .arity = data.arity,
-                    .captures = data.captures,
-                } };
+                const tmp: value.Value = .{ .function_pointer = data };
                 try compile_value(compiler, tmp, target + 1);
                 try compiler.main.append(
                     Instruction.register(.Capture, target, target + 1, @intCast(capture_addr)),
@@ -1054,29 +1037,37 @@ fn eval_expression(alloc: std.mem.Allocator, expr: expression.Expression) !value
     }
 }
 
-fn is_comptime_value(v: expression.Expression) bool {
-    const is_value = v == .value;
-    const is_comptime_array = v == .array and all_comptime_values(v.array.elements);
-    const is_comptime_dict = v == .dictionary and all_comptime_entry(v.dictionary.entries);
-    return is_value or is_comptime_array or is_comptime_dict;
-}
-
-fn all_comptime_values(values: []const expression.Expression) bool {
-    for (values) |v| {
-        if (!is_comptime_value(v)) {
-            return false;
-        }
+fn check_comptime_value(v: expression.Expression) ComptimeValueError!void {
+    switch (v) {
+        .array => |xs| {
+            for (xs.elements) |item| {
+                try check_comptime_value(item);
+            }
+        },
+        .dictionary => |dict| {
+            for (dict.entries) |entry| {
+                try check_comptime_value(entry.key.*);
+                try check_comptime_value(entry.value.*);
+            }
+        },
+        .binary_op => |bin| {
+            try check_comptime_value(bin.left.*);
+            try check_comptime_value(bin.right.*);
+        },
+        .unary_op => |un| {
+            try check_comptime_value(un.operant.*);
+        },
+        .struct_access => |sa| {
+            try check_comptime_value(sa.key.*);
+            try check_comptime_value(sa.strct.*);
+        },
+        .wrapped => |expr| try check_comptime_value(expr.*),
+        // NOTE: function calls are disallowed for now
+        .functioncall => return ComptimeValueError.HasFunctionCall,
+        // TODO: check if the identifier is a constant
+        .identifier => return ComptimeValueError.NonComptimeVariable,
+        else => {},
     }
-    return true;
-}
-
-fn all_comptime_entry(entries: []const expression.DictionaryEntry) bool {
-    for (entries) |e| {
-        if (!is_comptime_value(e.key.*) or !is_comptime_value(e.value.*)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 fn arithmetic_op_to_instruction(op: expression.ArithmeticOps) MajorCode {
