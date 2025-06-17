@@ -261,6 +261,7 @@ pub const CaptureMap = std.StringHashMap(Capture);
 // };
 const FunctionTable = std.StringHashMap(value.FunctionPointer);
 const VariableTable = std.StringHashMap(usize);
+const ValueTable = std.StringHashMap(value.Value);
 
 pub const CompiledSource = struct {
     allocator: std.mem.Allocator,
@@ -326,20 +327,24 @@ const Compiler = struct {
     stdlib: ?*CompiledSource = null,
     compiles_stdlib: bool = false,
 
+    ast: []const statement.Statement,
+    current_statement: usize = 0,
+
     const load_address: u8 = 255;
 
-    fn init(allocator: std.mem.Allocator) Compiler {
+    fn init(allocator: std.mem.Allocator, ast: []const statement.Statement) Compiler {
         return .{
             .main = std.ArrayList(Instruction).init(allocator),
             .functions = std.ArrayList(Program).init(allocator),
             .function_table = FunctionTable.init(allocator),
             .var_table = VariableTable.init(allocator),
             .static_mem = std.ArrayList(value.Value).init(allocator),
+            .ast = ast,
         };
     }
 
-    fn local(self: *Compiler) Compiler {
-        var tmp = Compiler.init(self.main.allocator);
+    fn local(self: *Compiler, ast: []const statement.Statement) Compiler {
+        var tmp = Compiler.init(self.main.allocator, ast);
         tmp.root = self;
         tmp.stdlib = self.stdlib;
         tmp.compiles_stdlib = self.compiles_stdlib;
@@ -388,7 +393,7 @@ pub fn compile_stdlib(allocator: std.mem.Allocator) Error!*CompiledSource {
             std.log.err("not implemented: handling of failed parsing: {}", .{err});
             return Error.ParserError;
         };
-        var compiler = Compiler.init(allocator);
+        var compiler = Compiler.init(allocator, statements);
         compiler.compiles_stdlib = true;
         try compile_program(&compiler, statements);
         compiled_sources = std.ArrayList(CompiledSource).init(allocator);
@@ -413,7 +418,7 @@ pub fn compile_source(source: []const u8, allocator: std.mem.Allocator) Error!Co
         std.log.err("not implemented: handling of failed parsing: {}", .{err});
         return Error.ParserError;
     };
-    var compiler = Compiler.init(allocator);
+    var compiler = Compiler.init(allocator, statements);
     compiler.stdlib = try compile_stdlib(allocator);
     try compile_program(&compiler, statements);
     compiler.var_table.deinit();
@@ -434,6 +439,7 @@ pub fn compile_source(source: []const u8, allocator: std.mem.Allocator) Error!Co
 fn compile_program(compiler: *Compiler, statements: []const statement.Statement) Error!void {
     for (statements) |st| {
         try compile_statment(compiler, st, .Global);
+        compiler.current_statement += 1;
     }
 }
 
@@ -442,7 +448,7 @@ fn compile_function(
     func: expression.Function,
     func_index: ?usize,
 ) Error!value.FunctionPointer {
-    var tmp = compiler.local();
+    var tmp = compiler.local(func.body);
     // NOTE: anything which is either local or does not need to be captured (i. e. stdlib functions)
     var locals = std.StringHashMap(?void).init(compiler.main.allocator);
     defer locals.deinit();
@@ -479,6 +485,7 @@ fn compile_function(
     try compile_function_arguments(&tmp, func.arity);
     for (func.body) |st| {
         try compile_statment(&tmp, st, .Local);
+        tmp.current_statement += 1;
     }
     if (tmp.main.items[tmp.main.items.len - 1].op_code.major != .Return)
         try tmp.main.append(Instruction.address(.Return, 0));
@@ -933,7 +940,9 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
             }
         },
         .array, .dictionary => {
-            check_comptime_value(expr.*) catch |err| {
+            var table = ValueTable.init(compiler.main.allocator);
+            try eval_constants(compiler, &table);
+            check_comptime_value(expr.*, &table) catch |err| {
                 switch (err) {
                     ComptimeValueError.HasFunctionCall => {
                         std.log.err(
@@ -951,7 +960,7 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                     },
                 }
             };
-            const tmp = try eval_expression(compiler.main.allocator, expr.*);
+            const tmp = try eval_expression(compiler.main.allocator, expr.*, &table) orelse unreachable;
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
             try compiler.static_mem.append(tmp);
             try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
@@ -1016,58 +1025,97 @@ fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) 
     }
 }
 
-fn eval_expression(alloc: std.mem.Allocator, expr: expression.Expression) !value.Value {
+fn eval_constants(compiler: *Compiler, value_map: *ValueTable) !void {
+    for (compiler.ast[0 .. compiler.current_statement + 1]) |st| {
+        try eval_statement(st, value_map);
+    }
+}
+
+fn eval_statement(stmnt: statement.Statement, value_map: *ValueTable) !void {
+    switch (stmnt) {
+        .assignment => |a| {
+            if (try eval_expression(value_map.allocator, a.value.*, value_map)) |val| {
+                try value_map.put(a.varName.name, val);
+            }
+        },
+        .if_statement => |@"if"| {
+            for (@"if".ifBranch.body) |st| {
+                try eval_statement(st, value_map);
+            }
+            if (@"if".elseBranch) |body| {
+                for (body) |st| {
+                    try eval_statement(st, value_map);
+                }
+            }
+        },
+        .whileloop => |@"while"| {
+            for (@"while".loop.body) |st| {
+                try eval_statement(st, value_map);
+            }
+        },
+        else => {},
+    }
+}
+
+fn eval_expression(
+    alloc: std.mem.Allocator,
+    expr: expression.Expression,
+    value_map: *const ValueTable,
+) !?value.Value {
     switch (expr) {
-        .value => |v| return v,
+        .value => |v| if (v != .function) return v else return null,
         .array => |array| {
             const tmp: []value.Value = try alloc.alloc(value.Value, array.elements.len);
             for (tmp, array.elements) |*out, elem| {
-                out.* = try eval_expression(alloc, elem);
+                out.* = try eval_expression(alloc, elem, value_map) orelse return null;
             }
             return .{ .array = tmp };
         },
         .dictionary => |dict| {
             var tmp = try value.Dictionary.empty(alloc);
             for (dict.entries) |entry| {
-                const key = try eval_expression(alloc, entry.key.*);
-                const val = try eval_expression(alloc, entry.value.*);
+                const key = try eval_expression(alloc, entry.key.*, value_map) orelse return null;
+                const val = try eval_expression(alloc, entry.value.*, value_map) orelse return null;
                 try tmp.dictionary.entries.put(key, val);
             }
             return tmp;
         },
-        else => unreachable,
+        .identifier => |id| return value_map.get(id.name),
+        else => return null,
     }
 }
 
-fn check_comptime_value(v: expression.Expression) ComptimeValueError!void {
+fn check_comptime_value(
+    v: expression.Expression,
+    value_map: *const ValueTable,
+) ComptimeValueError!void {
     switch (v) {
         .array => |xs| {
             for (xs.elements) |item| {
-                try check_comptime_value(item);
+                try check_comptime_value(item, value_map);
             }
         },
         .dictionary => |dict| {
             for (dict.entries) |entry| {
-                try check_comptime_value(entry.key.*);
-                try check_comptime_value(entry.value.*);
+                try check_comptime_value(entry.key.*, value_map);
+                try check_comptime_value(entry.value.*, value_map);
             }
         },
         .binary_op => |bin| {
-            try check_comptime_value(bin.left.*);
-            try check_comptime_value(bin.right.*);
+            try check_comptime_value(bin.left.*, value_map);
+            try check_comptime_value(bin.right.*, value_map);
         },
         .unary_op => |un| {
-            try check_comptime_value(un.operant.*);
+            try check_comptime_value(un.operant.*, value_map);
         },
         .struct_access => |sa| {
-            try check_comptime_value(sa.key.*);
-            try check_comptime_value(sa.strct.*);
+            try check_comptime_value(sa.key.*, value_map);
+            try check_comptime_value(sa.strct.*, value_map);
         },
-        .wrapped => |expr| try check_comptime_value(expr.*),
+        .wrapped => |expr| try check_comptime_value(expr.*, value_map),
+        .identifier => |id| if (!value_map.contains(id.name)) return ComptimeValueError.NonComptimeVariable,
         // NOTE: function calls are disallowed for now
         .functioncall => return ComptimeValueError.HasFunctionCall,
-        // TODO: check if the identifier is a constant
-        .identifier => return ComptimeValueError.NonComptimeVariable,
         else => {},
     }
 }
