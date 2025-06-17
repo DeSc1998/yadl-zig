@@ -1,0 +1,13 @@
+// RUN: DEFAULT
+
+array = [1, 2, 3, 4]
+print(array[0], array[1])
+// CHECK-OUT: 1 2
+
+array2 = [1 + 2, 3 - 4]
+print(array2[0], array2[1])
+// CHECK-OUT: 3 -1
+
+dict = { 'test': 1, 'value': 10 }
+print(dict['test'], dict['value'])
+// CHECK-OUT: 1 10

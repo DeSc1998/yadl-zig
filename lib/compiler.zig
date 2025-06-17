@@ -22,7 +22,8 @@ pub const Error = error{
 const ComptimeValueError = error{
     HasFunctionCall,
     NonComptimeVariable,
-};
+    IllegalExpression,
+} || std.mem.Allocator.Error;
 
 pub const MajorCode = enum(u6) {
     // Register OpCodes
@@ -941,7 +942,18 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
         },
         .array, .dictionary => {
             var table = ValueTable.init(compiler.main.allocator);
-            try eval_constants(compiler, &table);
+            eval_constants(compiler, &table) catch |err| {
+                switch (err) {
+                    error.IllegalExpression => {
+                        std.log.err(
+                            "can not evaluate constants: {s}",
+                            .{"an expression contains an illegal subexpression"},
+                        );
+                        return Error.NonComptimeValue;
+                    },
+                    else => return Error.OutOfMemory,
+                }
+            };
             check_comptime_value(expr.*, &table) catch |err| {
                 switch (err) {
                     ComptimeValueError.HasFunctionCall => {
@@ -958,11 +970,19 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                         );
                         return Error.NonComptimeValue;
                     },
+                    ComptimeValueError.IllegalExpression => {
+                        std.log.err(
+                            "{s} can not be evaluated at compile time: {s}",
+                            .{ @tagName(expr.*), "contains illegal subexpression" },
+                        );
+                        return Error.NonComptimeValue;
+                    },
+                    ComptimeValueError.OutOfMemory => return Error.OutOfMemory,
                 }
             };
-            const tmp = try eval_expression(compiler.main.allocator, expr.*, &table) orelse unreachable;
+            const tmp = eval_expression(compiler.main.allocator, expr.*, &table) catch return Error.OutOfMemory;
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
-            try compiler.static_mem.append(tmp);
+            try compiler.static_mem.append(tmp orelse unreachable);
             try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
         },
     }
@@ -1061,7 +1081,7 @@ fn eval_expression(
     alloc: std.mem.Allocator,
     expr: expression.Expression,
     value_map: *const ValueTable,
-) !?value.Value {
+) ComptimeValueError!?value.Value {
     switch (expr) {
         .value => |v| if (v != .function) return v else return null,
         .array => |array| {
@@ -1080,8 +1100,94 @@ fn eval_expression(
             }
             return tmp;
         },
+        .binary_op => |bin| return eval_binary_expression(alloc, bin.op, bin.left, bin.right, value_map),
         .identifier => |id| return value_map.get(id.name),
         else => return null,
+    }
+}
+
+fn eval_binary_expression(
+    alloc: std.mem.Allocator,
+    op: expression.Operator,
+    left: *expression.Expression,
+    right: *expression.Expression,
+    value_map: *const ValueTable,
+) ComptimeValueError!?value.Value {
+    const l = try eval_expression(alloc, left.*, value_map) orelse return null;
+    const r = try eval_expression(alloc, right.*, value_map) orelse return null;
+    if (std.meta.activeTag(l) != std.meta.activeTag(r)) {
+        return ComptimeValueError.IllegalExpression;
+    }
+    switch (op) {
+        .arithmetic => |a| {
+            switch (a) {
+                .Add => {
+                    if (l == .number) {
+                        return .{ .number = l.number.add(r.number) };
+                    } else if (l == .string) {
+                        const res = try std.mem.join(alloc, "", &.{ l.string, r.string });
+                        return .{ .string = res };
+                    } else return ComptimeValueError.IllegalExpression;
+                },
+                .Sub => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .number = l.number.sub(r.number) };
+                },
+                .Div => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .number = l.number.div(r.number) };
+                },
+                .Mul => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .number = l.number.mul(r.number) };
+                },
+                .Mod => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .number = l.number.mod(r.number) };
+                },
+                .Expo => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .number = l.number.expo(r.number) };
+                },
+            }
+        },
+        .boolean => |b| {
+            switch (b) {
+                .And => {
+                    if (l != .boolean) return ComptimeValueError.IllegalExpression;
+                    return .{ .boolean = l.boolean and r.boolean };
+                },
+                .Or => {
+                    if (l != .boolean) return ComptimeValueError.IllegalExpression;
+                    return .{ .boolean = l.boolean or r.boolean };
+                },
+                else => unreachable,
+            }
+        },
+        .compare => |c| {
+            switch (c) {
+                .Equal => return .{ .boolean = l.eql(r) },
+                .NotEqual => return .{ .boolean = !l.eql(r) },
+                .Less => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .boolean = l.number.asFloat() < r.number.asFloat() };
+                },
+                .LessEqual => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    const is_eql = l.eql(r);
+                    return .{ .boolean = l.number.asFloat() < r.number.asFloat() or is_eql };
+                },
+                .Greater => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    const is_eql = l.eql(r);
+                    return .{ .boolean = !(l.number.asFloat() < r.number.asFloat() or is_eql) };
+                },
+                .GreaterEqual => {
+                    if (l != .number) return ComptimeValueError.IllegalExpression;
+                    return .{ .boolean = !(l.number.asFloat() < r.number.asFloat()) };
+                },
+            }
+        },
     }
 }
 
