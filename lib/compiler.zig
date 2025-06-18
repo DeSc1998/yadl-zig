@@ -319,6 +319,7 @@ pub const CompiledSource = struct {
 };
 
 const Compiler = struct {
+    allocator: std.mem.Allocator,
     root: ?*Compiler = null,
     main: std.ArrayList(Instruction),
     functions: std.ArrayList(Program),
@@ -330,22 +331,25 @@ const Compiler = struct {
 
     ast: []const statement.Statement,
     current_statement: usize = 0,
+    constants: ValueTable,
 
     const load_address: u8 = 255;
 
     fn init(allocator: std.mem.Allocator, ast: []const statement.Statement) Compiler {
         return .{
+            .allocator = allocator,
             .main = std.ArrayList(Instruction).init(allocator),
             .functions = std.ArrayList(Program).init(allocator),
             .function_table = FunctionTable.init(allocator),
             .var_table = VariableTable.init(allocator),
             .static_mem = std.ArrayList(value.Value).init(allocator),
             .ast = ast,
+            .constants = ValueTable.init(allocator),
         };
     }
 
     fn local(self: *Compiler, ast: []const statement.Statement) Compiler {
-        var tmp = Compiler.init(self.main.allocator, ast);
+        var tmp = Compiler.init(self.allocator, ast);
         tmp.root = self;
         tmp.stdlib = self.stdlib;
         tmp.compiles_stdlib = self.compiles_stdlib;
@@ -666,6 +670,9 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
 }
 
 fn compile_statment(compiler: *Compiler, st: statement.Statement, kind: ScopeKind) Error!void {
+    eval_statement(compiler, st) catch |err| {
+        if (err == ComptimeValueError.OutOfMemory) return Error.OutOfMemory;
+    };
     return sw: switch (st) {
         .assignment => |a| {
             if (a.value.* == .value and a.value.value == .function) {
@@ -941,20 +948,7 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
             }
         },
         .array, .dictionary => {
-            var table = ValueTable.init(compiler.main.allocator);
-            eval_constants(compiler, &table) catch |err| {
-                switch (err) {
-                    error.IllegalExpression => {
-                        std.log.err(
-                            "can not evaluate constants: {s}",
-                            .{"an expression contains an illegal subexpression"},
-                        );
-                        return Error.NonComptimeValue;
-                    },
-                    else => return Error.OutOfMemory,
-                }
-            };
-            check_comptime_value(expr.*, &table) catch |err| {
+            check_comptime_value(expr.*, &compiler.constants) catch |err| {
                 switch (err) {
                     ComptimeValueError.HasFunctionCall => {
                         std.log.err(
@@ -973,14 +967,14 @@ fn compile_expression(compiler: *Compiler, expr: *const expression.Expression, t
                     ComptimeValueError.IllegalExpression => {
                         std.log.err(
                             "{s} can not be evaluated at compile time: {s}",
-                            .{ @tagName(expr.*), "contains illegal subexpression" },
+                            .{ @tagName(expr.*), "operants of binary expression differ in type" },
                         );
                         return Error.NonComptimeValue;
                     },
                     ComptimeValueError.OutOfMemory => return Error.OutOfMemory,
                 }
             };
-            const tmp = eval_expression(compiler.main.allocator, expr.*, &table) catch return Error.OutOfMemory;
+            const tmp = eval_expression(compiler.allocator, expr.*, &compiler.constants) catch return Error.OutOfMemory;
             const addr: u24 = @as(u24, @truncate(compiler.static_mem.items.len));
             try compiler.static_mem.append(tmp orelse unreachable);
             try compiler.main.append(Instruction.immidiate(.Read, target, @intCast(addr)));
@@ -1045,32 +1039,37 @@ fn compile_captures(compiler: *Compiler, fp: value.FunctionPointer, target: u8) 
     }
 }
 
-fn eval_constants(compiler: *Compiler, value_map: *ValueTable) !void {
+fn eval_constants(compiler: *Compiler) !void {
     for (compiler.ast[0 .. compiler.current_statement + 1]) |st| {
-        try eval_statement(st, value_map);
+        try eval_statement(compiler, st);
     }
 }
 
-fn eval_statement(stmnt: statement.Statement, value_map: *ValueTable) !void {
+fn eval_statement(compiler: *Compiler, stmnt: statement.Statement) !void {
     switch (stmnt) {
         .assignment => |a| {
-            if (try eval_expression(value_map.allocator, a.value.*, value_map)) |val| {
-                try value_map.put(a.varName.name, val);
+            if (try eval_expression(compiler.allocator, a.value.*, &compiler.constants)) |val| {
+                try compiler.constants.put(a.varName.name, val);
+            } else {
+                // NOTE: since evaluating has failed the variable is invalid at comptime moving forward
+                if (compiler.constants.contains(a.varName.name)) {
+                    _ = compiler.constants.remove(a.varName.name);
+                }
             }
         },
         .if_statement => |@"if"| {
             for (@"if".ifBranch.body) |st| {
-                try eval_statement(st, value_map);
+                try eval_statement(compiler, st);
             }
             if (@"if".elseBranch) |body| {
                 for (body) |st| {
-                    try eval_statement(st, value_map);
+                    try eval_statement(compiler, st);
                 }
             }
         },
         .whileloop => |@"while"| {
             for (@"while".loop.body) |st| {
-                try eval_statement(st, value_map);
+                try eval_statement(compiler, st);
             }
         },
         else => {},
@@ -1080,7 +1079,7 @@ fn eval_statement(stmnt: statement.Statement, value_map: *ValueTable) !void {
 fn eval_expression(
     alloc: std.mem.Allocator,
     expr: expression.Expression,
-    value_map: *const ValueTable,
+    value_map: *ValueTable,
 ) ComptimeValueError!?value.Value {
     switch (expr) {
         .value => |v| if (v != .function) return v else return null,
@@ -1111,7 +1110,7 @@ fn eval_binary_expression(
     op: expression.Operator,
     left: *expression.Expression,
     right: *expression.Expression,
-    value_map: *const ValueTable,
+    value_map: *ValueTable,
 ) ComptimeValueError!?value.Value {
     const l = try eval_expression(alloc, left.*, value_map) orelse return null;
     const r = try eval_expression(alloc, right.*, value_map) orelse return null;
