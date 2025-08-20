@@ -223,3 +223,27 @@ check_none = (items, pred) => check_impl(items, pred, true, (acc, value) => not 
 check_any = (items, pred) => check_impl(items, pred, false, (acc, value) => value or acc)
 check_all = (items, pred) => check_impl(items, pred, true, (acc, value) => value and acc)
 
+zip = (items...) => {
+    iters = map(items, (item) => default_iterator(item))
+    all_iters = check_all(items, (item) => type(item) == 'iterator')
+
+    if (all_iters) {
+        // TODO: iterator functions for zip
+        return iters
+    } else {
+        out = []
+        while (check_all(iters, (item) => has_next(item))) {
+            element = []
+            size = len(iters)
+            index = 0
+            while (index < size) {
+                item = next(iters[index])
+                element = append(element, item)
+                index = index + 1
+            }
+            out = append_items(out, element)
+        }
+        return out
+    }
+}
+
