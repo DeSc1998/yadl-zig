@@ -184,16 +184,19 @@ pub const Iterator = struct {
         runtime: Function,
         pointer: FunctionPointer,
         builtin: stdlibType.NextFn,
+        intrinsic: stdlibType.IntrIterFn,
     },
     has_next_fn: union(enum) {
         runtime: Function,
         pointer: FunctionPointer,
         builtin: stdlibType.HasNextFn,
+        intrinsic: stdlibType.IntrIterFn,
     },
     peek_fn: ?union(enum) {
         runtime: Function,
         pointer: FunctionPointer,
         builtin: stdlibType.PeekFn,
+        intrinsic: stdlibType.IntrIterFn,
     },
     data: []Value,
 
@@ -225,6 +228,22 @@ pub const Iterator = struct {
             .next_fn = .{ .builtin = next_fn },
             .has_next_fn = .{ .builtin = has_next_fn },
             .peek_fn = .{ .builtin = peek_fn },
+            .data = data,
+        } };
+    }
+
+    pub fn initIntr(
+        alloc: std.mem.Allocator,
+        next_fn: stdlibType.IntrIterFn,
+        has_next_fn: stdlibType.IntrIterFn,
+        peek_fn: stdlibType.IntrIterFn,
+        data: []Value,
+    ) Value {
+        return .{ .iterator = .{
+            .allocator = alloc,
+            .next_fn = .{ .intrinsic = next_fn },
+            .has_next_fn = .{ .intrinsic = has_next_fn },
+            .peek_fn = .{ .intrinsic = peek_fn },
             .data = data,
         } };
     }
