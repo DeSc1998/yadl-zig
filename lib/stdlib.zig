@@ -34,24 +34,20 @@ pub const MatchError = error{
 };
 
 pub fn match_call_args(exprs: []expression.Value, arity: libtype.Arity) MatchError!libtype.CallMatch {
-    // TODO: add support for optional arguments and variadic arguments
     if (exprs.len > arity.unnamed_count and !arity.has_variadics) return MatchError.TooManyArguments;
     if (exprs.len < arity.unnamed_count) return MatchError.NotEnoughArguments;
     return .{
         .unnamed_args = exprs[0..arity.unnamed_count],
-        .optional_args = &[0]libtype.OptionalArg{},
         .var_args = if (arity.has_variadics) exprs[arity.unnamed_count..] else null,
     };
 }
 
 pub fn match_runtime_call_args(exprs: []expression.Value, arity: expression.Arity) MatchError!libtype.CallMatch {
-    // TODO: add support for optional arguments and variadic arguments
     const has_variadics = if (arity.var_args) |_| true else false;
     if (exprs.len > arity.args.len and !has_variadics) return MatchError.TooManyArguments;
     if (exprs.len < arity.args.len) return MatchError.NotEnoughArguments;
     return .{
         .unnamed_args = exprs[0..arity.args.len],
-        .optional_args = &[0]libtype.OptionalArg{},
         .var_args = if (has_variadics) exprs[arity.args.len..] else null,
     };
 }
