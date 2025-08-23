@@ -3,7 +3,6 @@ const std = @import("std");
 const value = @import("value.zig");
 const compiler = @import("compiler.zig");
 const stdlib = @import("stdlib.zig");
-const Scope = @import("Scope.zig");
 
 pub const Error = error{
     NotImplemented,
@@ -115,24 +114,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
-            const size: usize = @intCast(m.registers[0].number.integer);
-            const tmp: []value.Value = try m.value_stack.allocator.alloc(value.Value, size);
-            defer m.value_stack.allocator.free(tmp);
-            var arg_index: usize = 0;
-            for (tmp) |*out| {
-                out.* = m.value_stack.pop() orelse {
-                    std.log.err("stack was empty: tried reading argument at {} from variadic arguments", .{arg_index});
-                    try print_trace(m);
-                    unreachable;
-                };
-                arg_index += 1;
-            }
-            const match = stdlib.match_call_args(tmp, context.arity) catch return Error.IllegalValue;
-            var scope = Scope.empty(m.frame_stack.allocator, m.out);
-            context.function(match, &scope) catch return Error.IllegalValue;
-            if (scope.result()) |result| {
-                m.registers[0] = result;
-            }
+            try context.function(m);
         },
         .CmpEq => {
             const regs = inst.argument.registers;
