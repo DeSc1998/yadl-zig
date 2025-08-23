@@ -17,7 +17,7 @@ const Frame = struct {
     stack_ptr: usize = 0,
 };
 
-const Maschine = struct {
+pub const Maschine = struct {
     registers: [std.math.maxInt(u8) + 1]value.Value = undefined,
     function_table: []const compiler.Program,
     value_stack: std.ArrayList(value.Value),
