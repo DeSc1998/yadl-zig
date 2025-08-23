@@ -54,6 +54,15 @@ fn is_finished_frame(f: *const Frame) bool {
     return f.stack_ptr >= f.program.instructions.len;
 }
 
+pub fn push_frame(m: *Maschine, ptr: value.FunctionPointer) Error!void {
+    const sources = compiler.compiled_sources orelse unreachable;
+    const source = &sources.items[ptr.source_address];
+    const program = source.functions[ptr.function_address];
+    try m.frame_stack.append(.{
+        .program = program,
+    });
+}
+
 fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
     var current_frame = m.frame_stack.items.len - 1;
     switch (inst.op_code.major) {
@@ -85,13 +94,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 try print_trace(m);
                 return Error.IllegalValue;
             }
-            const pointer = func.function_pointer;
-            const sources = compiler.compiled_sources orelse unreachable;
-            const source = &sources.items[pointer.source_address];
-            const program = source.functions[pointer.function_address];
-            try m.frame_stack.append(.{
-                .program = program,
-            });
+            try push_frame(m, func.function_pointer);
             return;
         },
         .CallStd => {
