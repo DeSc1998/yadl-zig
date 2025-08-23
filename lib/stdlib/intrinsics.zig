@@ -361,7 +361,13 @@ pub fn default_iterator(m: *maschine.Maschine) Error!void {
             );
         },
         .dictionary => return Error.NotImplemented,
-        else => return Error.IllegalValue,
+        else => |v| {
+            m.out.print(
+                "error: in default_iterator: provided value was of type '{s}' which is not allowed",
+                .{@tagName(v)},
+            ) catch return Error.IO;
+            return Error.IllegalValue;
+        },
     }
 }
 
