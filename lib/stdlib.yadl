@@ -238,7 +238,7 @@ zip = (items...) => {
             index = 0
             while (index < size) {
                 item = next(iters[index])
-                element = append(element, item)
+                element = append_items(element, item)
                 index = index + 1
             }
             out = append_items(out, element)
