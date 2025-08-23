@@ -104,8 +104,8 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
         },
         .CallIntr => {
             const addr = inst.argument.address;
-            const name = stdlib.builtins.keys()[addr];
-            const context = stdlib.builtins.get(name) orelse unreachable;
+            const name = stdlib.intrinsics.keys()[addr];
+            const context = stdlib.intrinsics.get(name) orelse unreachable;
             if (m.registers[0] != .number) {
                 std.log.err("argument count is not a number: type was {s}", .{@tagName(m.registers[0])});
                 try print_trace(m);
