@@ -107,7 +107,7 @@ fn map_next(iter_data: []Value, scope: *Scope) Error!void {
     defer scope.allocator.free(args);
 
     tmp[0] = iter_data[MAP_DATA_INDEX];
-    try iter_next(libtype.CallMatch.init(tmp, null, null), scope);
+    try iter_next(libtype.CallMatch.init(tmp, null), scope);
     args[0] = scope.result() orelse unreachable;
     const func = iter_data[MAP_FN_INDEX].function;
     try exec_runtime_function(func, args, scope);
@@ -122,7 +122,7 @@ fn map_peek(iter_data: []Value, scope: *Scope) Error!void {
     defer scope.allocator.free(args);
 
     tmp[0] = iter_data[MAP_DATA_INDEX];
-    try iter_peek(libtype.CallMatch.init(tmp, null, null), scope);
+    try iter_peek(libtype.CallMatch.init(tmp, null), scope);
     const result = scope.result() orelse unreachable;
     args[0] = result;
     const func = iter_data[MAP_FN_INDEX].function;
@@ -135,7 +135,7 @@ fn map_has_next(iter_data: []Value, scope: *Scope) Error!void {
     const tmp = try scope.allocator.alloc(Value, 1);
     defer scope.allocator.free(tmp);
     tmp[0] = iter_data[MAP_DATA_INDEX];
-    try iter_has_next(libtype.CallMatch.init(tmp, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(tmp, null), scope);
 }
 
 pub fn map(args: libtype.CallMatch, scope: *Scope) Error!void {
@@ -182,7 +182,7 @@ const FLATTEN_INTERMEDIATE_INDEX = 1;
 fn flatten_iter_has_elements(iter: Value, scope: *Scope) bool {
     if (iter == .iterator) {
         var tmp_array = [1]Value{iter};
-        iter_has_next(libtype.CallMatch.init(tmp_array[0..1], null, null), scope) catch return false;
+        iter_has_next(libtype.CallMatch.init(tmp_array[0..1], null), scope) catch return false;
         const tmp = scope.result() orelse unreachable;
         return tmp == .boolean and tmp.boolean;
     }
@@ -194,18 +194,17 @@ fn flatten_next(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(data_expr[FLATTEN_DATA_INDEX] == .iterator);
     if (!flatten_iter_has_elements(data_expr[FLATTEN_INTERMEDIATE_INDEX], scope)) {
         try iter_next(
-            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null, null),
+            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null),
             scope,
         );
         const result = scope.result() orelse unreachable;
         var tmp: [1]Value = .{result};
-        try default_iterator(libtype.CallMatch.init(&tmp, null, null), scope);
+        try default_iterator(libtype.CallMatch.init(&tmp, null), scope);
         data_expr[FLATTEN_INTERMEDIATE_INDEX] = scope.result() orelse unreachable;
     }
     try iter_next(
         libtype.CallMatch.init(
             data_expr[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1],
-            null,
             null,
         ),
         scope,
@@ -216,18 +215,17 @@ fn flatten_peek(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(data_expr[FLATTEN_DATA_INDEX] == .iterator);
     if (!flatten_iter_has_elements(data_expr[FLATTEN_INTERMEDIATE_INDEX], scope)) {
         try iter_next(
-            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null, null),
+            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null),
             scope,
         );
         const result = scope.result() orelse unreachable;
         var tmp: [1]Value = .{result};
-        try default_iterator(libtype.CallMatch.init(&tmp, null, null), scope);
+        try default_iterator(libtype.CallMatch.init(&tmp, null), scope);
         data_expr[FLATTEN_INTERMEDIATE_INDEX] = scope.result() orelse unreachable;
     }
     try iter_peek(
         libtype.CallMatch.init(
             data_expr[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1],
-            null,
             null,
         ),
         scope,
@@ -238,7 +236,7 @@ fn flatten_has_next(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(data_expr[FLATTEN_DATA_INDEX] == .iterator);
     if (data_expr[FLATTEN_INTERMEDIATE_INDEX] == .none) {
         try iter_has_next(
-            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null, null),
+            libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null),
             scope,
         );
     } else if (data_expr[FLATTEN_INTERMEDIATE_INDEX] == .iterator) {
@@ -246,14 +244,13 @@ fn flatten_has_next(data_expr: []Value, scope: *Scope) Error!void {
             libtype.CallMatch.init(
                 data_expr[FLATTEN_INTERMEDIATE_INDEX .. FLATTEN_INTERMEDIATE_INDEX + 1],
                 null,
-                null,
             ),
             scope,
         );
         const tmp = scope.result() orelse unreachable;
         if (tmp == .boolean and !tmp.boolean) {
             try iter_has_next(
-                libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null, null),
+                libtype.CallMatch.init(data_expr[FLATTEN_DATA_INDEX .. FLATTEN_DATA_INDEX + 1], null),
                 scope,
             );
         } else {
@@ -321,7 +318,7 @@ pub fn flatmap(args: libtype.CallMatch, scope: *Scope) Error!void {
             try map(args, scope);
             const map_result = scope.result() orelse unreachable;
             var tmp_array = [1]Value{map_result};
-            try flatten(libtype.CallMatch.init(&tmp_array, null, null), scope);
+            try flatten(libtype.CallMatch.init(&tmp_array, null), scope);
         },
         else => return Error.NotImplemented,
     }
@@ -399,7 +396,7 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
     try iter_peek(
-        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null, null),
+        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null),
         scope,
     );
     elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
@@ -413,7 +410,7 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
     var result = scope.result() orelse unreachable;
     while (result.boolean) {
         try iter_next(
-            libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null, null),
+            libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null),
             scope,
         );
         elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
@@ -436,7 +433,7 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
     const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     filter_tmp[0] = tmp_iter;
     filter_tmp[1] = filter_fn;
-    try filter(libtype.CallMatch.init(filter_tmp, null, null), scope);
+    try filter(libtype.CallMatch.init(filter_tmp, null), scope);
     const filter_iter = scope.result() orelse unreachable;
     var entries = ValueMap.init(scope.allocator);
     try entries.put(.{ .string = "key" }, try elements[GROUP_BY_TEMP_INDEX].clone());
@@ -444,7 +441,7 @@ fn group_by_next(data_expr: []Value, scope: *Scope) Error!void {
     try array_append(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
     elements[GROUP_BY_SEEN_INDEX] = scope.result() orelse unreachable;
     try iter_next(
-        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null, null),
+        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null),
         scope,
     );
     scope.return_result = try expression.yadlValue.Dictionary.init(entries);
@@ -480,7 +477,7 @@ fn group_by_peek(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(elements[GROUP_BY_FN_INDEX] == .function);
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
     try iter_peek(
-        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null, null),
+        libtype.CallMatch.init(elements[GROUP_BY_DATA_INDEX .. GROUP_BY_DATA_INDEX + 1], null),
         scope,
     );
     elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
@@ -499,7 +496,7 @@ fn group_by_peek(data_expr: []Value, scope: *Scope) Error!void {
     const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     filter_tmp[0] = tmp_iter;
     filter_tmp[1] = filter_fn;
-    try filter(libtype.CallMatch.init(filter_tmp, null, null), scope);
+    try filter(libtype.CallMatch.init(filter_tmp, null), scope);
     const filter_iter = scope.result() orelse unreachable;
     var entries = ValueMap.init(scope.allocator);
     try entries.put(.{ .string = "key" }, try elements[GROUP_BY_TEMP_INDEX].clone());
@@ -513,13 +510,13 @@ fn group_by_has_next(data_expr: []Value, scope: *Scope) Error!void {
     std.debug.assert(elements[GROUP_BY_DATA_INDEX] == .iterator);
     const tmp_iter = try elements[GROUP_BY_DATA_INDEX].iter_clone();
     var tmp_args: [1]Value = .{tmp_iter};
-    try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(&tmp_args, null), scope);
     var result = scope.result() orelse unreachable;
     if (result == .boolean and !result.boolean) {
         scope.return_result = .{ .boolean = false };
         return;
     }
-    try iter_peek(libtype.CallMatch.init(&tmp_args, null, null), scope);
+    try iter_peek(libtype.CallMatch.init(&tmp_args, null), scope);
     elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
     try exec_runtime_function(
         elements[GROUP_BY_FN_INDEX].function,
@@ -530,13 +527,13 @@ fn group_by_has_next(data_expr: []Value, scope: *Scope) Error!void {
     try array_contains(elements[GROUP_BY_SEEN_INDEX .. GROUP_BY_SEEN_INDEX + 2], scope);
     result = scope.result() orelse unreachable;
     while (result == .boolean and result.boolean) {
-        try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+        try iter_has_next(libtype.CallMatch.init(&tmp_args, null), scope);
         result = scope.result() orelse unreachable;
         if (result == .boolean and !result.boolean) {
             scope.return_result = .{ .boolean = false };
             return;
         }
-        try iter_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+        try iter_next(libtype.CallMatch.init(&tmp_args, null), scope);
         elements[GROUP_BY_TEMP_INDEX] = scope.result() orelse unreachable;
         try exec_runtime_function(
             elements[GROUP_BY_FN_INDEX].function,
@@ -686,12 +683,12 @@ fn check(context: Context, args: libtype.CallMatch, scope: *Scope) Error!void {
             var acc: Context.OutType = context.initial;
             const elems = try elements.clone();
             var tmp_args: [1]Value = .{elems};
-            try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+            try iter_has_next(libtype.CallMatch.init(&tmp_args, null), scope);
             var condition = scope.result() orelse unreachable;
             var call_args = try scope.allocator.alloc(Value, 1);
             defer scope.allocator.free(call_args);
             while (condition == .boolean and condition.boolean) {
-                try iter_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+                try iter_next(libtype.CallMatch.init(&tmp_args, null), scope);
                 call_args[0] = scope.result() orelse unreachable;
                 try exec_runtime_function(func, call_args, scope);
                 if (scope.result()) |r| {
@@ -704,7 +701,7 @@ fn check(context: Context, args: libtype.CallMatch, scope: *Scope) Error!void {
                 } else {
                     return Error.ValueNotFound;
                 }
-                try iter_has_next(libtype.CallMatch.init(&tmp_args, null, null), scope);
+                try iter_has_next(libtype.CallMatch.init(&tmp_args, null), scope);
                 condition = scope.result() orelse unreachable;
             }
             scope.return_result = switch (acc) {
@@ -741,7 +738,7 @@ fn filter_next(data_expr: []Value, scope: *Scope) Error!void {
     var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
     var tmp_args: [1]Value = undefined;
     const func = elements[FILTER_FN_INDEX].function;
-    try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
     var result = scope.result() orelse unreachable;
     if (!result.boolean) {
         scope.return_result = result;
@@ -749,20 +746,20 @@ fn filter_next(data_expr: []Value, scope: *Scope) Error!void {
     }
 
     iter = .{elements[FILTER_DATA_INDEX]};
-    try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_next(libtype.CallMatch.init(&iter, null), scope);
     var out = scope.result() orelse unreachable;
     tmp_args = .{out};
     try exec_runtime_function(func, &tmp_args, scope);
     result = scope.result() orelse unreachable;
     while (result == .boolean and !result.boolean) {
-        try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
         result = scope.result() orelse unreachable;
         if (!result.boolean) {
             scope.return_result = .{ .none = null };
             return;
         }
 
-        try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_next(libtype.CallMatch.init(&iter, null), scope);
         out = scope.result() orelse unreachable;
         tmp_args = .{out};
         try exec_runtime_function(func, &tmp_args, scope);
@@ -778,27 +775,27 @@ fn filter_peek(data_expr: []Value, scope: *Scope) Error!void {
     var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
     var tmp_args: [1]Value = iter;
     const func = elements[FILTER_FN_INDEX].function;
-    try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
     var result = scope.result() orelse unreachable;
     if (!result.boolean) {
         scope.return_result = result;
         return;
     }
 
-    try iter_peek(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_peek(libtype.CallMatch.init(&iter, null), scope);
     tmp_args = .{scope.result() orelse unreachable};
     try exec_runtime_function(func, &tmp_args, scope);
     result = scope.result() orelse unreachable;
     while (result == .boolean and !result.boolean) {
-        try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
-        try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_next(libtype.CallMatch.init(&iter, null), scope);
+        try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
         result = scope.result() orelse unreachable;
         if (!result.boolean) {
             scope.return_result = .{ .none = null };
             return;
         }
 
-        try iter_peek(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_peek(libtype.CallMatch.init(&iter, null), scope);
         tmp_args = .{scope.result() orelse unreachable};
         try exec_runtime_function(func, &tmp_args, scope);
         result = scope.result() orelse unreachable;
@@ -813,26 +810,26 @@ fn filter_has_next(data_expr: []Value, scope: *Scope) Error!void {
     var iter: [1]Value = .{try elements[FILTER_DATA_INDEX].iter_clone()};
     var tmp_args: [1]Value = undefined;
     const func = elements[FILTER_FN_INDEX].function;
-    try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
     var result = scope.result() orelse unreachable;
     if (!result.boolean) {
         scope.return_result = result;
         return;
     }
 
-    try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
+    try iter_next(libtype.CallMatch.init(&iter, null), scope);
     tmp_args = .{scope.result() orelse unreachable};
     try exec_runtime_function(func, &tmp_args, scope);
     result = scope.result() orelse unreachable;
     while (result == .boolean and !result.boolean) {
-        try iter_has_next(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_has_next(libtype.CallMatch.init(&iter, null), scope);
         result = scope.result() orelse unreachable;
         if (!result.boolean) {
             scope.return_result = result;
             return;
         }
 
-        try iter_next(libtype.CallMatch.init(&iter, null, null), scope);
+        try iter_next(libtype.CallMatch.init(&iter, null), scope);
         tmp_args = .{scope.result() orelse unreachable};
         try exec_runtime_function(func, &tmp_args, scope);
         result = scope.result() orelse unreachable;
@@ -888,7 +885,7 @@ fn zip_next(data_expr: []Value, scope: *Scope) Error!void {
     const local_data = data_expr;
     const out = try scope.allocator.alloc(Value, local_data.len);
     for (local_data, 0..) |*iter, index| {
-        try iter_next(libtype.CallMatch.init(iter[0..1], null, null), scope);
+        try iter_next(libtype.CallMatch.init(iter[0..1], null), scope);
         const value = scope.result() orelse unreachable;
         out[index] = value;
     }
@@ -899,7 +896,7 @@ fn zip_peek(data_expr: []Value, scope: *Scope) Error!void {
     const local_data = data_expr;
     const out = try scope.allocator.alloc(Value, local_data.len);
     for (local_data, 0..) |*iter, index| {
-        try iter_peek(libtype.CallMatch.init(iter[0..1], null, null), scope);
+        try iter_peek(libtype.CallMatch.init(iter[0..1], null), scope);
         const value = scope.result() orelse unreachable;
         out[index] = value;
     }
@@ -910,7 +907,7 @@ fn zip_has_next(data_expr: []Value, scope: *Scope) Error!void {
     const local_data = data_expr;
     var all_true = true;
     for (local_data) |*iter| {
-        try iter_has_next(libtype.CallMatch.init(iter[0..1], null, null), scope);
+        try iter_has_next(libtype.CallMatch.init(iter[0..1], null), scope);
         const condition = scope.result() orelse unreachable;
         std.debug.assert(condition == .boolean);
         all_true = all_true and condition.boolean;
@@ -1129,12 +1126,12 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
         },
         .iterator => {
             var elems = [1]Value{elements};
-            try iter_has_next(libtype.CallMatch.init(elems[0..1], null, null), scope);
+            try iter_has_next(libtype.CallMatch.init(elems[0..1], null), scope);
             var condition = scope.result() orelse unreachable;
             var call_args = try scope.allocator.alloc(Value, 1);
             defer scope.allocator.free(call_args);
             while (condition == .boolean and condition.boolean) {
-                try iter_next(libtype.CallMatch.init(elems[0..1], null, null), scope);
+                try iter_next(libtype.CallMatch.init(elems[0..1], null), scope);
                 const tmp = scope.result() orelse unreachable;
                 call_args[0] = tmp;
                 try exec_runtime_function(func, call_args, scope);
@@ -1146,7 +1143,7 @@ pub fn first(args: libtype.CallMatch, scope: *Scope) Error!void {
                 } else {
                     return Error.ValueNotFound;
                 }
-                try iter_has_next(libtype.CallMatch.init(elems[0..1], null, null), scope);
+                try iter_has_next(libtype.CallMatch.init(elems[0..1], null), scope);
                 condition = scope.result() orelse unreachable;
             }
             scope.return_result = try default_value.clone();
@@ -1299,7 +1296,7 @@ fn evalFormattedString(string: []const u8, scope: *Scope) Error!void {
             const result = scope.result() orelse unreachable;
             var tmp_array = [1]Value{result};
             try conversions.toString(
-                libtype.CallMatch.init(tmp_array[0..1], null, null),
+                libtype.CallMatch.init(tmp_array[0..1], null),
                 scope,
             );
             const str = scope.result() orelse unreachable;
@@ -1521,10 +1518,7 @@ pub fn iter_next(args: libtype.CallMatch, scope: *Scope) Error!void {
         .builtin => |f| {
             try f(iter.data, scope);
         },
-        .pointer => {
-            std.log.err("todo: iterator next case pointer", .{});
-            return Error.NotImplemented;
-        },
+        else => unreachable,
     }
 }
 
@@ -1539,10 +1533,7 @@ pub fn iter_peek(args: libtype.CallMatch, scope: *Scope) Error!void {
             .builtin => |f| {
                 try f(iter.data, scope);
             },
-            .pointer => {
-                std.log.err("todo: iterator peek case pointer", .{});
-                return Error.NotImplemented;
-            },
+            else => unreachable,
         }
     } else {
         scope.return_result = .{ .none = null };
@@ -1564,10 +1555,7 @@ pub fn iter_has_next(args: libtype.CallMatch, scope: *Scope) Error!void {
         .builtin => |f| {
             try f(iter.data, scope);
         },
-        .pointer => {
-            std.log.err("todo: iterator has_next case pointer", .{});
-            return Error.NotImplemented;
-        },
+        else => unreachable,
     }
 }
 
