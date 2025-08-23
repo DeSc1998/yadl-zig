@@ -5,10 +5,11 @@ const compiler = @import("compiler.zig");
 const stdlib = @import("stdlib.zig");
 const Scope = @import("Scope.zig");
 
-const Error = error{
+pub const Error = error{
     NotImplemented,
     IllegalValue,
     EmptyStack,
+    IO,
 } || std.mem.Allocator.Error;
 
 const Frame = struct {
@@ -91,7 +92,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 m.registers[0] = m.registers[regs.source_right];
             if (func != .function_pointer) {
                 std.log.err("called value is not a compiled function: type was '{s}'", .{@tagName(func)});
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             try push_frame(m, func.function_pointer);
@@ -111,7 +112,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
             const context = stdlib.intrinsics.get(name) orelse unreachable;
             if (m.registers[0] != .number) {
                 std.log.err("argument count is not a number: type was {s}", .{@tagName(m.registers[0])});
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             const size: usize = @intCast(m.registers[0].number.integer);
@@ -151,12 +152,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                     m.registers[regs.destination] = .{ .boolean = result.float < 0 };
                 }
             } else {
-                const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
-                std.log.err("Illegal compare less @ sp = {}, f = {}", .{
-                    stack_ptr,
-                    current_frame,
-                });
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 std.log.err("unable to compare under less: {s} and {s}", .{ @tagName(left), @tagName(right) });
                 return Error.IllegalValue;
             }
@@ -200,24 +196,14 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 const addr = inst.argument.address;
                 const ptr = &m.frame_stack.items[current_frame].program.memory[addr];
                 ptr.* = m.value_stack.pop() orelse {
-                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
-                    std.log.err("stack was empty @ sp = {}, f = {}", .{
-                        stack_ptr,
-                        current_frame,
-                    });
-                    try print_trace(m);
+                    try print_trace(m, Error.EmptyStack);
                     return Error.EmptyStack;
                 };
             } else {
                 const regs = inst.argument.registers;
                 const dest = regs.destination;
                 m.registers[dest] = m.value_stack.pop() orelse {
-                    const stack_ptr = m.frame_stack.items[current_frame].stack_ptr;
-                    std.log.err("stack was empty @ sp = {}, f = {}", .{
-                        stack_ptr,
-                        current_frame,
-                    });
-                    try print_trace(m);
+                    try print_trace(m, Error.EmptyStack);
                     return Error.EmptyStack;
                 };
             }
@@ -250,7 +236,14 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         m.registers[regs.destination] = .{ .none = null };
                     }
                 },
-                else => unreachable,
+                else => {
+                    std.log.err(
+                        "trying to access a non accessable value: type was {s}",
+                        .{@tagName(left)},
+                    );
+                    try print_trace(m, Error.IllegalValue);
+                    return Error.IllegalValue;
+                },
             }
         },
         .AccessWrite => {
@@ -329,7 +322,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                         m.frame_stack.items[current_frame].program.memory.len,
                         left.address,
                     });
-                    try print_trace(m);
+                    try print_trace(m, Error.IllegalValue);
                     return Error.IllegalValue;
                 }
             }
@@ -341,7 +334,7 @@ fn execute_instruction(m: *Maschine, inst: compiler.Instruction) Error!void {
                 std.log.err("destination was not a function_pointer: was {s}", .{
                     @tagName(m.registers[reg.destination]),
                 });
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             const fp = m.registers[reg.destination].function_pointer;
@@ -386,7 +379,7 @@ fn execute_arithmetic(m: *Maschine, inst: compiler.Instruction) Error!void {
                     "can not {s} '{s}' and '{s}': implicit conversion not allowed",
                     .{ name, @tagName(left), @tagName(right) },
                 );
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             if (inst.op_code.minor == .Register) {
@@ -410,7 +403,7 @@ fn execute_arithmetic(m: *Maschine, inst: compiler.Instruction) Error!void {
         .string => |l| {
             if (inst.op_code.major != .Add) {
                 std.log.err("strings can only be added", .{});
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             if (right != .string) {
@@ -418,7 +411,7 @@ fn execute_arithmetic(m: *Maschine, inst: compiler.Instruction) Error!void {
                     "can not add '{s}' and '{s}': implicit conversion not allowed",
                     .{ @tagName(left), @tagName(right) },
                 );
-                try print_trace(m);
+                try print_trace(m, Error.IllegalValue);
                 return Error.IllegalValue;
             }
             const res = try std.mem.join(m.frame_stack.allocator, "", &.{ l, right.string });
@@ -429,13 +422,13 @@ fn execute_arithmetic(m: *Maschine, inst: compiler.Instruction) Error!void {
                 "can not {s} left-side '{s}': implicit conversion not allowed",
                 .{ name, @tagName(val) },
             );
-            try print_trace(m);
+            try print_trace(m, Error.IllegalValue);
             return Error.IllegalValue;
         },
     }
 }
 
-fn print_trace(m: *Maschine) !void {
+pub fn print_trace(m: *Maschine, err: Error) !void {
     const frame = m.frame_stack.items[m.frame_stack.items.len - 1];
     const stack_ptr = frame.stack_ptr;
     const stderr = std.io.getStdErr();
@@ -443,6 +436,7 @@ fn print_trace(m: *Maschine) !void {
     const base = if (stack_ptr >= 5) stack_ptr - 5 else 0;
     const total_instructions = frame.program.instructions.len;
     const view_size: usize = @min(10, @max(total_instructions - base, 0));
+    std.log.err("encountered: {!}", .{err});
     std.log.err("current stack ptr: {}, frame: {}, inst count: {}", .{
         frame.stack_ptr,
         m.frame_stack.items.len - 1,
@@ -463,10 +457,11 @@ fn print_trace(m: *Maschine) !void {
     writer.print("---------------------------------\n", .{}) catch unreachable;
     writer.print("---- registers ------------------\n", .{}) catch unreachable;
     for (m.registers[0..16], 0..) |reg, index| {
-        writer.print("reg@{}: {s} ", .{ index, @tagName(reg) }) catch unreachable;
-        var scope = Scope.empty(m.frame_stack.allocator, writer.any());
-        stdlib.functions.printValue(reg, &scope) catch unreachable;
-        _ = stderr.write("\n") catch unreachable;
+        writer.print("  @ {}: {s} ", .{ index, @tagName(reg) }) catch unreachable;
+        m.registers[0] = .{ .number = .{ .integer = 1 } };
+        try m.value_stack.append(reg);
+        try stdlib.intrinsic.print(m);
     }
     writer.print("---------------------------------\n", .{}) catch unreachable;
+    return err;
 }
