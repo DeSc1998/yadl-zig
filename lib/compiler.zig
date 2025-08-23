@@ -645,10 +645,10 @@ fn compile_function_arguments(compiler: *Compiler, arity: value.Arity) Error!voi
         try compiler.main.append(Instruction.register(.Not, compare_reg, compare_reg, null));
         const jmp_index = @as(u24, @truncate(compiler.main.items.len));
         try compiler.main.append(Instruction.address(.JmpOnFalse, 0));
-        // tmp_array = append(tmp_array, tmp_arg)
+        // tmp_array = append_items(tmp_array, tmp_arg)
         try compiler.main.append(Instruction.register(.Push, tmp_array_reg, null, null));
         try compiler.main.append(Instruction.immidiate(.Move, 0, 2));
-        const addr = stdlib.builtins.getIndex("append") orelse unreachable;
+        const addr = stdlib.intrinsics.getIndex("append_items") orelse unreachable;
         try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
         try compiler.main.append(Instruction.register(.Move, tmp_array_reg, 0, null));
         // var_arg_count -= 1
