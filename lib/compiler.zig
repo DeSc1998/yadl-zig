@@ -199,7 +199,7 @@ pub const Instruction = packed struct(u32) {
                     _ = try writer.write(" // end of while loop");
                 }
             } else if (self.op_code.major == .CallIntr) {
-                const name = stdlib.builtins.keys()[self.argument.address];
+                const name = stdlib.intrinsics.keys()[self.argument.address];
                 _ = try writer.print(" // Intrinsic: {s}", .{name});
             } else if (self.op_code.major == .CallStd) {
                 const source = &(compiled_sources orelse unreachable).items[0];
@@ -463,7 +463,7 @@ fn compile_function(
     }
     if (func.arity.var_args) |var_args|
         try locals.put(var_args.name, null);
-    for (stdlib.builtins.keys()) |key| {
+    for (stdlib.intrinsics.keys()) |key| {
         try locals.put(key, null);
     }
     if (compiled_sources) |ss| {
@@ -848,8 +848,8 @@ fn compile_function_call(compiler: *Compiler, fc: expression.FunctionCall, targe
         } }, target);
         try compile_call_arguments(compiler, fc.args, target, context);
         try compiler.main.append(Instruction.address(.CallStd, addr));
-    } else if (stdlib.builtins.getIndex(fc.func.identifier.name)) |addr| {
-        const context = stdlib.builtins.get(fc.func.identifier.name) orelse unreachable;
+    } else if (stdlib.intrinsics.getIndex(fc.func.identifier.name)) |addr| {
+        const context = stdlib.intrinsics.get(fc.func.identifier.name) orelse unreachable;
         try compile_call_arguments(compiler, fc.args, target, context);
         try compiler.main.append(Instruction.address(.CallIntr, @as(u24, @truncate(addr))));
     } else if (compiler.get_function(fc.func.identifier.name)) |data| {
