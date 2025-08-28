@@ -1100,8 +1100,36 @@ fn eval_expression(
             return tmp;
         },
         .binary_op => |bin| return eval_binary_expression(alloc, bin.op, bin.left, bin.right, value_map),
+        .unary_op => |un| return eval_unary_expression(alloc, un.op, un.operant, value_map),
         .identifier => |id| return value_map.get(id.name),
         else => return null,
+    }
+}
+
+fn eval_unary_expression(
+    alloc: std.mem.Allocator,
+    op: expression.Operator,
+    operant: *expression.Expression,
+    value_map: *ValueTable,
+) ComptimeValueError!?value.Value {
+    const val = try eval_expression(alloc, operant.*, value_map) orelse return null;
+    switch (op) {
+        .arithmetic => |a| {
+            std.debug.assert(a == .Sub);
+            std.debug.assert(val == .number);
+            const n = val.number;
+            if (n == .float) {
+                return .{ .number = .{ .float = -n.float } };
+            } else {
+                return .{ .number = .{ .integer = -n.integer } };
+            }
+        },
+        .boolean => |b| {
+            std.debug.assert(b == .Not);
+            std.debug.assert(val == .boolean);
+            return .{ .boolean = !val.boolean };
+        },
+        else => unreachable,
     }
 }
 
