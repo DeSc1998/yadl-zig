@@ -3,9 +3,7 @@
 
 x = () => () => 3
 
-// NOTE: if we allowed something like `x()()` then the parser for function calls must
-//    be left-recursive and which causes a stackoverflow garenteed
-print((x())())
+print(x()())
 
 // CHECK-OUT: 3
 
